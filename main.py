@@ -81,93 +81,93 @@ class tokenizer:
         while self.inputSystem == ' ' or self.inputSystem=='\n':
             self.next()
 
-        match self.inputSystem:
-            case '':
-                self.next()
-                return token(255, '', 'eofToken', None)
-            case '*':
-                self.next()
-                return token(1, '*', 'timesToken', None)
-            case '/':
-                self.next()
-                return token(2, '/', 'divToken', None)
-            case '-':
-                self.next()
-                return token(12, '-', 'minusToken', None)
-            case '+':
-                self.next()
-                return token(11, '+', 'plusToken', None)
-            case '=':
-                self.next()
-                if self.inputSystem == '=':
-                    self.next()
-                    return token(20, '==', 'eqlToken', None)
-                else:
-                    self.next()
-                    return token(0, '', 'errorToken', None)
-            case '!':
-                self.next()
-                if self.inputSystem == '=':
-                    self.next()
-                    return token(21, '!=', 'neqToken', None)
-                else:
-                    self.next()
-                    return token(0, '', 'errorToken', None)
-            case '<':
-                self.next()
-                if self.inputSystem == '=':
-                    self.next()
-                    return token(24, '<=', 'leqToken', None)
-                elif self.inputSystem == '-':
-                    self.next()
-                    return token(40, '<-', 'becomesToken', None)
-                elif self.inputSystem == ' ':
-                    self.next()
-                    return token(22, '<', 'lssToken', None)
-
-                else:
-                    return token(0, '', 'errorToken', None)
-
-            case '>':
-                self.next()
-                if self.inputSystem == '=':
-                    self.next()
-                    return token(23, '>=', 'geqToken', None)
-                elif self.inputSystem == ' ':
-                    self.next()
-                    return token(25, '>', 'gtrToken', None)
-                else:
-                    self.next()
-                    return token(0, '', 'errorToken', None)
-            case '.':
-                self.next()
-                return token(30, '.', 'periodToken', None)
-            case ',':
-                self.next()
-                return token(31, ',', 'commaToken', None)
-            case '[':
-                self.next()
-                return token(32, '[', 'openbracketToken', None)
-            case ']':
-                self.next()
-                return token(34, ']', 'closebracketToken', None)
-            case ')':
-                self.next()
-                return token(35, ')', 'closeparenToken', None)
-            case '(':
-                self.next()
-                return token(50, '(', 'openparenToken', None)
-            case ';':
-                self.next()
-                return token(70, ';', 'semiToken', None)
-            case '}':
-                self.next()
-                return token(80, '}', 'endToken', None)
-            case '{':
-                self.next()
-                return token(150, '{', 'beginToken', None)
-
         str = self.inputSystem
+        if str == '':
+            self.next()
+            return token(255, '', 'eofToken', None)
+        elif str == '*':
+            self.next()
+            return token(1, '*', 'timesToken', None)
+        elif str == '/':
+            self.next()
+            return token(2, '/', 'divToken', None)
+        elif str == '-':
+            self.next()
+            return token(12, '-', 'minusToken', None)
+        elif str == '+':
+            self.next()
+            return token(11, '+', 'plusToken', None)
+        elif str == '=':
+            self.next()
+            if self.inputSystem == '=':
+                self.next()
+                return token(20, '==', 'eqlToken', None)
+            else:
+                self.next()
+                return token(0, '', 'errorToken', None)
+        elif str == '!':
+            self.next()
+            if self.inputSystem == '=':
+                self.next()
+                return token(21, '!=', 'neqToken', None)
+            else:
+                self.next()
+                return token(0, '', 'errorToken', None)
+        elif str == '<':
+            self.next()
+            if self.inputSystem == '=':
+                self.next()
+                return token(24, '<=', 'leqToken', None)
+            elif self.inputSystem == '-':
+                self.next()
+                return token(40, '<-', 'becomesToken', None)
+            elif self.inputSystem == ' ':
+                self.next()
+                return token(22, '<', 'lssToken', None)
+
+            else:
+                return token(0, '', 'errorToken', None)
+
+        elif str == '>':
+            self.next()
+            if self.inputSystem == '=':
+                self.next()
+                return token(23, '>=', 'geqToken', None)
+            elif self.inputSystem == ' ':
+                self.next()
+                return token(25, '>', 'gtrToken', None)
+            else:
+                self.next()
+                return token(0, '', 'errorToken', None)
+        elif str == '.':
+            self.next()
+            return token(30, '.', 'periodToken', None)
+        elif str == ',':
+            self.next()
+            return token(31, ',', 'commaToken', None)
+        elif str == '[':
+            self.next()
+            return token(32, '[', 'openbracketToken', None)
+        elif str == ']':
+            self.next()
+            return token(34, ']', 'closebracketToken', None)
+        elif str == ')':
+            self.next()
+            return token(35, ')', 'closeparenToken', None)
+        elif str == '(':
+            self.next()
+            return token(50, '(', 'openparenToken', None)
+        elif str == ';':
+            self.next()
+            return token(70, ';', 'semiToken', None)
+        elif str == '}':
+            self.next()
+            return token(80, '}', 'endToken', None)
+        elif str == '{':
+            self.next()
+            return token(150, '{', 'beginToken', None)
+
+
         while str.isdigit():
             self.next()
             str += self.inputSystem
@@ -180,38 +180,38 @@ class tokenizer:
                 str += self.inputSystem
                 self.next()
         if self.inputSystem == ' ' or self.inputSystem == '\n':
-            match str:
-                case 'then':
+
+                if str == 'then':
                     return token(41, 'then', 'thenToken', None)
-                case 'do':
+                elif str == 'do':
                     return token(42, 'do', 'doToken', None)
-                case 'od':
+                elif str == 'od':
                     return token(81, 'od', 'odToken', None)
-                case 'fi':
+                elif str == 'fi':
                     return token(82, 'fi', 'fiToken', None)
-                case 'else':
+                elif str == 'else':
                     return token(90, 'else', 'elseToken', None)
-                case 'let':
+                elif str == 'let':
                     return token(100, 'let', 'letToken', None)
-                case 'call':
+                elif str == 'call':
                     return token(101, 'call', 'callToken', None)
-                case 'if':
+                elif str == 'if':
                     return token(102, 'if', 'ifToken', None)
-                case 'while':
+                elif str == 'while':
                     return token(103, 'while', 'whileToken', None)
-                case 'return':
+                elif str == 'return':
                     return token(104, 'return', 'returnToken', None)
-                case 'var':
+                elif str == 'var':
                     return token(110, 'var', 'varToken', None)
-                case 'array':
+                elif str == 'array':
                     return token(111, 'array', 'arrToken', None)
-                case 'void':
+                elif str == 'void':
                     return token(112, 'void', 'voidToken', None)
-                case 'function':
+                elif str == 'function':
                     return token(113, 'function', 'funcToken', None)
-                case 'procedure':
+                elif str =='procedure':
                     return token(114, 'procedure', 'procToken', None)
-                case 'main':
+                elif str == 'main':
                     return token(200, 'main', 'mainToken', None)
 
         if str == '':
@@ -401,6 +401,7 @@ class Parser:
                 self.checkFor("ident")
 
     def funcBody(self):
+        None
 
     def funcDecl(self):
         if self.checkFor("voidToken",test = True):
