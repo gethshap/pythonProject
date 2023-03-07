@@ -227,6 +227,13 @@ class Parser:
     def next(self):
         self.inputSym = self.mytk.getNext()
 
+    self.ssa_space = []
+    self.var_space = []
+    self.constant_space = []
+
+    def ir_create(self):
+        None
+
     def checkFor(self, tkt, test=False, debug=True):
         if tkt == self.inputSym.tokentype:
             if debug == True and test == False:
@@ -346,7 +353,7 @@ class Parser:
 
     def typeDecl(self):
         if self.checkFor("varToken"):
-            None
+            return "var"
         elif self.checkFor("arrToken"):
             self.checkFor("openbracketToken")
             self.checkFor("number")
@@ -355,9 +362,11 @@ class Parser:
                 self.checkFor("openbracketToken")
                 self.checkFor("number")
                 self.checkFor("closebracketToken")
+            return "array"
 
     def varDecl(self):
-        self.typeDecl()
+        if(self.typeDecl()=='var'):
+            None
         self.checkFor("ident")
         while self.checkFor("commaToken", test=True):
             self.checkFor("commaToken")
