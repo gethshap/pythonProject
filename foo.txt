@@ -1,5 +1,12 @@
 main 
-var a, e;
+var a, b, c,d,e,f,g;
 {
+let a <- 54;
+let b <- 6;
+let g <- 6;
+let c <- a - b*100 - (20/g);
+let d <- c - b;
+let e <- a + b;
+let f <- a + g;
 }
 .

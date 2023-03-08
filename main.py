@@ -3,7 +3,10 @@
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import graphviz
+
 debug = True
+
+
 def print_hi(name):
     fo = open("foo.txt", "w")
     print("文件名: ", fo.name)
@@ -78,7 +81,7 @@ class tokenizer:
         print(msg)
 
     def getNext(self):
-        while self.inputSystem == ' ' or self.inputSystem=='\n':
+        while self.inputSystem == ' ' or self.inputSystem == '\n':
             self.next()
 
         str = self.inputSystem
@@ -167,11 +170,11 @@ class tokenizer:
             self.next()
             return token(150, '{', 'beginToken', None)
 
-
-        while str.isdigit():
+        if (str.isdigit()):
             self.next()
-            str += self.inputSystem
-        if self.inputSystem == ' ':
+            while self.inputSystem.isdigit():
+                str += self.inputSystem
+                self.next()
             return token(60, str, 'number', int(str))
 
         if str.isalpha():
@@ -181,42 +184,65 @@ class tokenizer:
                 self.next()
         if self.inputSystem == ' ' or self.inputSystem == '\n':
 
-                if str == 'then':
-                    return token(41, 'then', 'thenToken', None)
-                elif str == 'do':
-                    return token(42, 'do', 'doToken', None)
-                elif str == 'od':
-                    return token(81, 'od', 'odToken', None)
-                elif str == 'fi':
-                    return token(82, 'fi', 'fiToken', None)
-                elif str == 'else':
-                    return token(90, 'else', 'elseToken', None)
-                elif str == 'let':
-                    return token(100, 'let', 'letToken', None)
-                elif str == 'call':
-                    return token(101, 'call', 'callToken', None)
-                elif str == 'if':
-                    return token(102, 'if', 'ifToken', None)
-                elif str == 'while':
-                    return token(103, 'while', 'whileToken', None)
-                elif str == 'return':
-                    return token(104, 'return', 'returnToken', None)
-                elif str == 'var':
-                    return token(110, 'var', 'varToken', None)
-                elif str == 'array':
-                    return token(111, 'array', 'arrToken', None)
-                elif str == 'void':
-                    return token(112, 'void', 'voidToken', None)
-                elif str == 'function':
-                    return token(113, 'function', 'funcToken', None)
-                elif str =='procedure':
-                    return token(114, 'procedure', 'procToken', None)
-                elif str == 'main':
-                    return token(200, 'main', 'mainToken', None)
+            if str == 'then':
+                return token(41, 'then', 'thenToken', None)
+            elif str == 'do':
+                return token(42, 'do', 'doToken', None)
+            elif str == 'od':
+                return token(81, 'od', 'odToken', None)
+            elif str == 'fi':
+                return token(82, 'fi', 'fiToken', None)
+            elif str == 'else':
+                return token(90, 'else', 'elseToken', None)
+            elif str == 'let':
+                return token(100, 'let', 'letToken', None)
+            elif str == 'call':
+                return token(101, 'call', 'callToken', None)
+            elif str == 'if':
+                return token(102, 'if', 'ifToken', None)
+            elif str == 'while':
+                return token(103, 'while', 'whileToken', None)
+            elif str == 'return':
+                return token(104, 'return', 'returnToken', None)
+            elif str == 'var':
+                return token(110, 'var', 'varToken', None)
+            elif str == 'array':
+                return token(111, 'array', 'arrToken', None)
+            elif str == 'void':
+                return token(112, 'void', 'voidToken', None)
+            elif str == 'function':
+                return token(113, 'function', 'funcToken', None)
+            elif str == 'procedure':
+                return token(114, 'procedure', 'procToken', None)
+            elif str == 'main':
+                return token(200, 'main', 'mainToken', None)
 
         if str == '':
             return token(255, '', 'eofToken', None)
         return token(61, str, 'ident', None)
+
+
+class ssa_line:
+    const =None
+    const_value =None
+
+
+    ssa_line_source_1 = None
+    ssa_line_source_2 = None
+    op = None
+    ssa_line_target = None
+    def __init__(self,ssa_line_target ,ssa_line_source_1, ssa_line_source_2, op):
+        if op == None:
+            self.const = True
+            self.const_value = ssa_line_target
+        else:
+            self.ssa_line_source_1 = ssa_line_source_1
+            self.ssa_line_source_2 = ssa_line_source_2
+            self.op = op
+            self.ssa_line_target = ssa_line_target
+
+    def to_tuple(self):
+        return (self.ssa_line_source_1,self.ssa_line_source_2, self.op)
 
 
 class Parser:
@@ -227,20 +253,55 @@ class Parser:
     def next(self):
         self.inputSym = self.mytk.getNext()
 
-    self.ssa_space = []
-    self.var_space = []
-    self.constant_space = []
+    ssa_lines = []
+    ssa_lookup_table = {}
+    ssa_count = 0
+    var_space = {}
+    constant_space = {}
+    arr_apce = {}
 
-    def ir_create(self):
-        None
+    def ssa_line(self, ssa_line_const, ssa_line_source_1, ssa_line_source_2, op):
+        if op == None:
+            r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
+            r = r.to_tuple()
+            self.ssa_lines.append(ssa_line_const)
+            self.ssa_lookup_table[r] = self.ssa_count
+            self.constant_space[ssa_line_const] = self.ssa_count
+            r = self.ssa_count
+            self.ssa_count = self.ssa_count + 1
+            return r
+
+        else:
+            r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
+            r = r.to_tuple()
+            self.ssa_lines.append((op,ssa_line_source_1, ssa_line_source_2))
+            self.ssa_lookup_table[r] = self.ssa_count
+            self.constant_space[ssa_line_const] = self.ssa_count
+            r = self.ssa_count
+            self.ssa_count = self.ssa_count + 1
+            return r
+
+
+
+    def ssa_count_increase(self):
+        cur = self.ssa_count
+        self.ssa_count = self.ssa_count +1
+        return cur
+
+    def ir_create(self, op2, get, ):
+        self.ssa_space.append([])
 
     def checkFor(self, tkt, test=False, debug=True):
+
         if tkt == self.inputSym.tokentype:
+            v,nv,t = self.inputSym.value, self.inputSym.number_vale, self.inputSym.text
             if debug == True and test == False:
-                print(tkt +"  "+ str(self.inputSym.value)+"  "+ str(self.inputSym.number_vale)+"    "+self.inputSym.text)
+                print(tkt + "  " + str(self.inputSym.value) + "  " + str(
+                    self.inputSym.number_vale) + "    " + self.inputSym.text)
             if test == False:
                 self.next()
-            return True
+            return True, v,nv,t
+
 
         else:
             if test == False:
@@ -249,15 +310,20 @@ class Parser:
             else:
                 return False
 
-
     def number(self):
-        self.checkFor('number')
+        _, v, nv, t = self.checkFor('number')
+        if nv in self.constant_space:
+            return self.constant_space[nv]
+        else:
+            return self.ssa_line(nv,None,None,None)
+
 
     def assignment(self):
         self.checkFor('letToken')
-        self.designator()
+        line_number_for_dst,text = self.designator()
         self.checkFor('becomesToken')
-        self.expression()
+        line_number = self.expression()
+        self.var_space[text] = line_number
 
     def relation(self):
         self.expression()
@@ -265,58 +331,40 @@ class Parser:
         self.expression()
 
     def relOp(self):
-        if self.checkFor('eqlToken',test=True):
+        if self.checkFor('eqlToken', test=True):
             self.checkFor('eqlToken')
-        elif self.checkFor('neqToken',test=True):
+        elif self.checkFor('neqToken', test=True):
             self.checkFor('neqToken')
-        elif  self.checkFor('lssToken',test=True):
+        elif self.checkFor('lssToken', test=True):
             self.checkFor('lssToken')
-        elif self.checkFor('leqToken',test=True) :
+        elif self.checkFor('leqToken', test=True):
             self.checkFor('leqToken')
-        elif self.checkFor('gtrToken',test=True):
+        elif self.checkFor('gtrToken', test=True):
             self.checkFor('gtrToken')
-        elif self.checkFor('geqToken',test=True):
+        elif self.checkFor('geqToken', test=True):
             self.checkFor('geqToken')
-
-
 
     def funcCall(self):
         self.checkFor("callToken")
         self.checkFor('ident')
         if self.checkFor('openparenToken'):
             self.expression()
-            while self.checkFor('commaToken',test=True):
+            while self.checkFor('commaToken', test=True):
                 self.checkFor('commaToken')
                 self.expression()
             self.checkFor('closeparenToken')
 
 
 
-    def factor(self):
-        if self.checkFor('ident',test=True):
-            self.designator()
-        elif  self.checkFor('number',test=True):
-            self.number()
-        elif self.checkFor('openparenToken',test=True):
-            self.checkFor('openparenToken')
-            self.expression()
-            self.checkFor('closeparenToken')
-        elif self.checkFor('callToken',test=True):
-            self.funcCall()
-
-    def statSequence(self):
-        None
-
     def ifStatement(self):
         self.checkFor('ifToken')
         self.relation()
         self.checkFor('thenToken')
         self.statSequence()
-        while self.checkFor("elseToken",test=True):
+        while self.checkFor("elseToken", test=True):
             self.checkFor("elseToken")
             self.statSequence()
         self.checkFor("fiToken")
-
 
     def whileStatement(self):
         self.checkFor('whileToken')
@@ -326,30 +374,84 @@ class Parser:
         self.checkFor("odToken")
 
 
-
-
+    def factor(self):
+        if self.checkFor('ident', test=True):
+            line_number,_ = self.designator()
+            return line_number
+        elif self.checkFor('number', test=True):
+            line_number = self.number()
+            return line_number
+        elif self.checkFor('openparenToken', test=True):
+            self.checkFor('openparenToken')
+            line_numbr = self.expression()
+            self.checkFor('closeparenToken')
+            return line_numbr
+        elif self.checkFor('callToken', test=True):
+            self.funcCall()
 
     def term(self):
-        self.factor()
-        while self.checkFor('timesToken',test=True) or self.checkFor('divToken',test=True):
-            self.next()
-            self.factor()
+        cur_line = self.factor()
+        while self.checkFor('timesToken', test=True) or self.checkFor('divToken', test=True):
+            if self.checkFor('timesToken'):
+                op = 'MUL'
+
+                next_line = self.factor()
+                r = ssa_line(None,cur_line,next_line,op)
+                r = r.to_tuple()
+                if r in self.ssa_lookup_table:
+                    cur_line = self.ssa_lookup_table[r]
+                else:
+                    cur_line = self.ssa_line(None,cur_line,next_line,op)
+            elif self.checkFor('divToken'):
+                op = 'DIV'
+                next_line = self.factor()
+                r = ssa_line(None, cur_line, next_line, op)
+                r = r.to_tuple()
+                if r in self.ssa_lookup_table:
+                    cur_line = self.ssa_lookup_table[r]
+                else:
+                    cur_line = self.ssa_line(None, cur_line, next_line, op)
+        return cur_line
+
 
     def expression(self):
-        self.term()
-        while self.checkFor('plusToken',test=True) or self.checkFor('minusToken',test=True):
-            self.next()
-            self.term()
+        cur_line = self.term()
+        while self.checkFor('plusToken', test=True) or self.checkFor('minusToken', test=True):
+            if self.checkFor('plusToken'):
+                op = "ADD"
+                next_line = self.term()
+                r = ssa_line(None, cur_line, next_line, op)
+                r = r.to_tuple()
+                if r in self.ssa_lookup_table:
+                    cur_line = self.ssa_lookup_table[r]
+                else:
+                    cur_line = self.ssa_line(None, cur_line, next_line, op)
+
+            elif self.checkFor('minusToken'):
+                op = "SUB"
+                next_line = self.term()
+                r = ssa_line(None, cur_line, next_line, op)
+                r = r.to_tuple()
+                if r in self.ssa_lookup_table:
+                    cur_line = self.ssa_lookup_table[r]
+                else:
+                    cur_line = self.ssa_line(None, cur_line, next_line, op)
+
+        return cur_line
 
 
     def designator(self):
-        self.checkFor('ident')
-        while self.checkFor('openbracketToken',test=True):
+        bool0, value, number_value, text = self.checkFor('ident')
+        arr = False
+        while self.checkFor('openbracketToken', test=True):
+            arr = True
             self.checkFor('openbracketToken')
             self.expression()
             self.checkFor('closebracketToken')
+        if arr == True:
+            None
 
-
+        return self.var_space[text],text
 
     def typeDecl(self):
         if self.checkFor("varToken"):
@@ -365,47 +467,54 @@ class Parser:
             return "array"
 
     def varDecl(self):
-        if(self.typeDecl()=='var'):
-            None
-        self.checkFor("ident")
+        '''
+
+
+
+        '''
+
+        self.ssa_line(0,None,None,None)
+        self.typeDecl()
+        _, _, _, text = self.checkFor("ident")
+        self.var_space[text] = self.constant_space[0]
         while self.checkFor("commaToken", test=True):
             self.checkFor("commaToken")
-            self.checkFor("ident")
+            _, _, _, text = self.checkFor("ident")
+            self.var_space[text] = self.constant_space[0]
         self.checkFor("semiToken")
 
     def returnStatement(self):
         self.checkFor("returnToken")
-        if self.checkFor('ident',test=True) or self.checkFor('number',test=True) or self.checkFor('openparenToken',test=True) or self.checkFor('callToken',test=True):
+        if self.checkFor('ident', test=True) or self.checkFor('number', test=True) or self.checkFor('openparenToken',
+                                                                                                    test=True) or self.checkFor(
+                'callToken', test=True):
             self.expression()
 
-
-
-
     def statement(self):
-        if self.checkFor("letToken",test=True):
+        if self.checkFor("letToken", test=True):
             self.assignment()
-        elif self.checkFor("callToken",test=True):
+        elif self.checkFor("callToken", test=True):
             self.funcCall()
-        elif self.checkFor("ifToken",test=True):
+        elif self.checkFor("ifToken", test=True):
             self.ifStatement()
-        elif self.checkFor("whileToken",test=True):
+        elif self.checkFor("whileToken", test=True):
             self.whileStatement()
-        elif self.checkFor("returnToken",test=True):
+        elif self.checkFor("returnToken", test=True):
             self.returnStatement()
 
     def statSequence(self):
         self.statement()
-        while self.checkFor('semiToken',test = True):
+        while self.checkFor('semiToken', test=True):
             self.checkFor('semiToken')
             self.statement()
-        if self.checkFor('semiToken',test = True):
+        if self.checkFor('semiToken', test=True):
             self.checkFor('semiToken')
 
     def formalParam(self):
         self.checkFor('openparenToken')
-        if self.checkFor("ident",test = True):
+        if self.checkFor("ident", test=True):
             self.checkFor("ident")
-            while self.checkFor("commaToken",test = True):
+            while self.checkFor("commaToken", test=True):
                 self.checkFor("commaToken")
                 self.checkFor("ident")
 
@@ -413,20 +522,19 @@ class Parser:
         None
 
     def funcDecl(self):
-        if self.checkFor("voidToken",test = True):
+        if self.checkFor("voidToken", test=True):
             self.checkFor("voidToken")
         self.checkFor("funcToken")
         self.checkFor("ident")
         None
 
-
-
     def Parse(self):
         self.checkFor('mainToken')  # main
         self.varDecl()
-        self.checkFor('beginToken')
-        self.checkFor('endToken')
-        self.checkFor('periodToken')  # .
+        self.checkFor("beginToken")
+        self.statSequence()
+        self.checkFor("endToken")
+        self.checkFor('periodToken')
 
 
 # Press the green button in the gutter to run the script.
@@ -434,7 +542,7 @@ if __name__ == '__main__':
     myp = Parser('foo.txt')
     cp = Parser('foo.txt')
     a = []
-    for i in range(9):
+    for i in range(50):
         a.append(cp.inputSym)
         cp.next()
     myp.Parse()
