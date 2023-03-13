@@ -6,6 +6,8 @@ import graphviz
 
 debug = True
 
+import copy
+
 
 def print_hi(name):
     fo = open("foo.txt", "w")
@@ -182,7 +184,7 @@ class tokenizer:
             while self.inputSystem.isalpha() or self.inputSystem.isdigit():
                 str += self.inputSystem
                 self.next()
-        if self.inputSystem == ' ' or self.inputSystem == '\n':
+        if self.inputSystem == ' ' or self.inputSystem == '\n' or self.inputSystem == ';':
 
             if str == 'then':
                 return token(41, 'then', 'thenToken', None)
@@ -223,15 +225,15 @@ class tokenizer:
 
 
 class ssa_line:
-    const =None
-    const_value =None
-
+    const = None
+    const_value = None
 
     ssa_line_source_1 = None
     ssa_line_source_2 = None
     op = None
     ssa_line_target = None
-    def __init__(self,ssa_line_target ,ssa_line_source_1, ssa_line_source_2, op):
+
+    def __init__(self, ssa_line_target, ssa_line_source_1, ssa_line_source_2, op):
         if op == None:
             self.const = True
             self.const_value = ssa_line_target
@@ -242,7 +244,32 @@ class ssa_line:
             self.ssa_line_target = ssa_line_target
 
     def to_tuple(self):
-        return (self.ssa_line_source_1,self.ssa_line_source_2, self.op)
+        return (self.ssa_line_source_1, self.ssa_line_source_2, self.op)
+
+
+class Basic_block:
+    block_number = None
+    dom_block_number = None
+    fall_through = None
+    branch = None
+    next_block = None
+    ssa_lines = []
+    first_ssa_line_number = None
+    ssa_lookup_table = {}
+    var_space = {}
+
+    def __init__(self, bn, dbn, ft, branch, next_block, slt,vs):
+        self.block_number = bn
+        self.dom_block_number = dbn
+        self.fall_through = ft
+        self.branch = branch
+        self.next_block = next_block
+        self.ssa_lookup_table = copy.deepcopy(slt)
+        self.var_space = copy.deepcopy(vs)
+        self.ssa_lines=[]
+
+
+
 
 
 class Parser:
@@ -253,12 +280,43 @@ class Parser:
     def next(self):
         self.inputSym = self.mytk.getNext()
 
-    ssa_lines = []
-    ssa_lookup_table = {}
-    ssa_count = 0
-    var_space = {}
+    block_count = 0
+    block_collection = {}
+    ssa_count = 1
+
     constant_space = {}
-    arr_apce = {}
+
+    current_block = None
+
+    def create_block(self, dbn, ft, branch, next_block, slt,vs):
+        b = Basic_block(self.block_count,dbn, ft, branch, next_block, slt,vs)
+        self.block_collection[self.block_count] = b
+        r = self.block_count
+        self.block_count = self.block_count + 1
+        return r
+
+    def write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op):
+        if ssa_line_const != None:
+            r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
+            r = r.to_tuple()
+            self.block_collection[bn].ssa_lines.append((self.ssa_count,ssa_line_const))
+            self.constant_space[ssa_line_const] = self.ssa_count
+            r = self.ssa_count
+            self.ssa_count = self.ssa_count + 1
+            return r
+        else:
+            r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
+            r = r.to_tuple()
+            self.block_collection[bn].ssa_lines.append((self.ssa_count,  ssa_line_source_1, ssa_line_source_2, op))
+            if op == "READ"  or op == None:
+                r = self.ssa_count
+                self.ssa_count = self.ssa_count + 1
+                return r
+            self.block_collection[bn].ssa_lookup_table[r] = self.ssa_count
+            r = self.ssa_count
+            self.ssa_count = self.ssa_count + 1
+            return r
+
 
     def ssa_line(self, ssa_line_const, ssa_line_source_1, ssa_line_source_2, op):
         if op == None:
@@ -274,18 +332,16 @@ class Parser:
         else:
             r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
             r = r.to_tuple()
-            self.ssa_lines.append((op,ssa_line_source_1, ssa_line_source_2))
+            self.ssa_lines.append((op, ssa_line_source_1, ssa_line_source_2))
             self.ssa_lookup_table[r] = self.ssa_count
             self.constant_space[ssa_line_const] = self.ssa_count
             r = self.ssa_count
             self.ssa_count = self.ssa_count + 1
             return r
 
-
-
     def ssa_count_increase(self):
         cur = self.ssa_count
-        self.ssa_count = self.ssa_count +1
+        self.ssa_count = self.ssa_count + 1
         return cur
 
     def ir_create(self, op2, get, ):
@@ -294,13 +350,13 @@ class Parser:
     def checkFor(self, tkt, test=False, debug=True):
 
         if tkt == self.inputSym.tokentype:
-            v,nv,t = self.inputSym.value, self.inputSym.number_vale, self.inputSym.text
+            v, nv, t = self.inputSym.value, self.inputSym.number_vale, self.inputSym.text
             if debug == True and test == False:
                 print(tkt + "  " + str(self.inputSym.value) + "  " + str(
                     self.inputSym.number_vale) + "    " + self.inputSym.text)
             if test == False:
                 self.next()
-            return True, v,nv,t
+            return True, v, nv, t
 
 
         else:
@@ -315,68 +371,180 @@ class Parser:
         if nv in self.constant_space:
             return self.constant_space[nv]
         else:
-            return self.ssa_line(nv,None,None,None)
-
+            return self.write_line_to_block(0,nv,None,None,None)
 
     def assignment(self):
         self.checkFor('letToken')
-        line_number_for_dst,text = self.designator()
+        line_number_for_dst, text = self.designator()
         self.checkFor('becomesToken')
         line_number = self.expression()
-        self.var_space[text] = line_number
+        self.block_collection[self.current_block].var_space[text] = line_number
 
     def relation(self):
-        self.expression()
-        self.relOp()
-        self.expression()
+        line_a = self.expression()
+        _, v, nv, t = self.relOp()
+        line_b = self.expression()
+
+        return v, self.write_line_to_block(self.current_block,None,line_a, line_b, "CMP")
 
     def relOp(self):
         if self.checkFor('eqlToken', test=True):
-            self.checkFor('eqlToken')
+            return self.checkFor('eqlToken')
         elif self.checkFor('neqToken', test=True):
-            self.checkFor('neqToken')
+            return self.checkFor('neqToken')
         elif self.checkFor('lssToken', test=True):
-            self.checkFor('lssToken')
+            return self.checkFor('lssToken')
         elif self.checkFor('leqToken', test=True):
-            self.checkFor('leqToken')
+            return self.checkFor('leqToken')
         elif self.checkFor('gtrToken', test=True):
-            self.checkFor('gtrToken')
+            return self.checkFor('gtrToken')
         elif self.checkFor('geqToken', test=True):
-            self.checkFor('geqToken')
+            return self.checkFor('geqToken')
 
     def funcCall(self):
         self.checkFor("callToken")
-        self.checkFor('ident')
-        if self.checkFor('openparenToken'):
+        bool0, value, number_value, text  = self.checkFor('ident')
+        if text == "InputNum":
+            return self.write_line_to_block(self.current_block,None,None,None,"READ")
+
+        if self.checkFor('openparenToken',test=True):
+            self.checkFor('openparenToken')
             self.expression()
             while self.checkFor('commaToken', test=True):
                 self.checkFor('commaToken')
                 self.expression()
             self.checkFor('closeparenToken')
 
-
-
     def ifStatement(self):
         self.checkFor('ifToken')
-        self.relation()
+        type,cmp_line = self.relation()
+        dom_block =  self.current_block
         self.checkFor('thenToken')
+        branch_key = None
+
+        if type == 20:
+            self.write_line_to_block(self.current_block,None,cmp_line,None,"BNE")
+            branch_key = (cmp_line,None,"BNE")
+        if type == 21:
+            self.write_line_to_block(self.current_block,None,cmp_line,None,"BEQ")
+            branch_key = ( cmp_line, None, "BEQ")
+        if type == 22:
+            self.write_line_to_block(self.current_block,None,cmp_line,None,"BGE")
+            branch_key = (cmp_line, None, "BGE")
+        if type == 23:
+            self.write_line_to_block(self.current_block,None,cmp_line,None,"BLE")
+            branch_key = (cmp_line, None, "BLE")
+        if type == 24:
+            self.write_line_to_block(self.current_block,None,cmp_line,None,"BGT")
+            branch_key = ( cmp_line, None, "BGE")
+        if type == 25:
+            self.write_line_to_block(self.current_block,None,cmp_line,None,"BLE")
+            branch_key = ( cmp_line, None, "BLE")
+        '''
+        block_number = None
+        dom_block_number = None
+        fall_through = None
+        branch = None
+        next_block = None
+        ssa_lines = []
+        first_ssa_line_number = None
+        ssa_lookup_table = {}
+        var_space = {}
+        '''
+        ft_block_number = self.create_block(dom_block,None,None,None,self.block_collection[dom_block].ssa_lookup_table,
+                                            self.block_collection[dom_block].var_space)
+        branch_block_number = self.create_block(dom_block, None, None, None,
+                                              self.block_collection[dom_block].ssa_lookup_table,
+                                              self.block_collection[dom_block].var_space)
+        exit_block_number = self.create_block(dom_block,None,None,None,self.block_collection[dom_block].ssa_lookup_table,
+                                            self.block_collection[dom_block].var_space)
+        self.block_collection[dom_block].branch = branch_block_number
+        self.block_collection[dom_block].fall_through = ft_block_number
+        self.block_collection[branch_block_number].fall_through = exit_block_number
+        self.block_collection[ft_block_number].branch = exit_block_number
+
+        self.current_block = ft_block_number
         self.statSequence()
-        while self.checkFor("elseToken", test=True):
+        if not self.block_collection[ft_block_number].ssa_lines:
+            self.write_line_to_block(ft_block_number,None,None,None,None)
+
+
+        self.current_block = exit_block_number
+        for key,val in self.block_collection[dom_block].var_space.items():
+            if self.block_collection[ft_block_number].var_space[key] != val:
+                line_number = self.write_line_to_block(self.current_block,None,self.block_collection[ft_block_number].var_space[key],val,'PHI')
+                self.block_collection[exit_block_number].var_space[key] = line_number
+
+        if  self.block_collection[exit_block_number].ssa_lines:
+            first_line_number =  self.block_collection[exit_block_number].ssa_lines[0][0]
+            self.write_line_to_block(ft_block_number,None,first_line_number,None,"BRA")
+
+
+
+
+        if self.checkFor("elseToken", test=True):
+
             self.checkFor("elseToken")
+            self.current_block = branch_block_number
             self.statSequence()
+            if not self.block_collection[branch_block_number].ssa_lines:
+                self.write_line_to_block(branch_block_number, None, None, None, None)
+            first_line_number =  self.block_collection[branch_block_number].ssa_lines[0][0]
+            branch_line_number = self.block_collection[dom_block].ssa_lines[-1][0]
+            new_branch_line = (branch_line_number,cmp_line,first_line_number,branch_key[2])
+            self.block_collection[dom_block].ssa_lines[-1] =new_branch_line
+
+            del self.block_collection[dom_block].ssa_lookup_table[branch_key]
+            del self.block_collection[branch_block_number].ssa_lookup_table[branch_key]
+            del self.block_collection[ft_block_number].ssa_lookup_table[branch_key]
+            del self.block_collection[exit_block_number].ssa_lookup_table[branch_key]
+
+            self.block_collection[dom_block].ssa_lookup_table[(cmp_line,first_line_number,branch_key[2])] =branch_line_number
+            self.block_collection[branch_block_number].ssa_lookup_table[(cmp_line,first_line_number,branch_key[2])] =branch_line_number
+            self.block_collection[ft_block_number].ssa_lookup_table[(cmp_line,first_line_number,branch_key[2])] =branch_line_number
+            self.block_collection[exit_block_number].ssa_lookup_table[(cmp_line,first_line_number,branch_key[2])] =branch_line_number
+
+            self.current_block = exit_block_number
+            for key, val in self.block_collection[dom_block].var_space.items():
+                if self.block_collection[branch_block_number].var_space[key] != val:
+                    line_number = self.write_line_to_block(self.current_block, None,
+                                                           self.block_collection[branch_block_number].var_space[key], val,
+                                                           'PHI')
+                    self.block_collection[exit_block_number].var_space[key] = line_number
+
         self.checkFor("fiToken")
 
     def whileStatement(self):
         self.checkFor('whileToken')
-        self.relation()
+        type,cmp_line  = self.relation()
+        dom_block = self.current_block
+        self.checkFor('thenToken')
+        branch_key = None
+        if type == 20:
+            self.write_line_to_block(self.current_block, None, cmp_line, None, "BNE")
+            branch_key = (cmp_line, None, "BNE")
+        if type == 21:
+            self.write_line_to_block(self.current_block, None, cmp_line, None, "BEQ")
+            branch_key = (cmp_line, None, "BEQ")
+        if type == 22:
+            self.write_line_to_block(self.current_block, None, cmp_line, None, "BGE")
+            branch_key = (cmp_line, None, "BGE")
+        if type == 23:
+            self.write_line_to_block(self.current_block, None, cmp_line, None, "BLE")
+            branch_key = (cmp_line, None, "BLE")
+        if type == 24:
+            self.write_line_to_block(self.current_block, None, cmp_line, None, "BGT")
+            branch_key = (cmp_line, None, "BGE")
+        if type == 25:
+            self.write_line_to_block(self.current_block, None, cmp_line, None, "BLE")
+            branch_key = (cmp_line, None, "BLE")
         self.checkFor("doToken")
         self.statSequence()
         self.checkFor("odToken")
 
-
     def factor(self):
         if self.checkFor('ident', test=True):
-            line_number,_ = self.designator()
+            line_number, _ = self.designator()
             return line_number
         elif self.checkFor('number', test=True):
             line_number = self.number()
@@ -387,7 +555,7 @@ class Parser:
             self.checkFor('closeparenToken')
             return line_numbr
         elif self.checkFor('callToken', test=True):
-            self.funcCall()
+            return self.funcCall()
 
     def term(self):
         cur_line = self.factor()
@@ -396,23 +564,22 @@ class Parser:
                 op = 'MUL'
 
                 next_line = self.factor()
-                r = ssa_line(None,cur_line,next_line,op)
+                r = ssa_line(None, cur_line, next_line, op)
                 r = r.to_tuple()
-                if r in self.ssa_lookup_table:
-                    cur_line = self.ssa_lookup_table[r]
+                if r in self.block_collection[self.current_block].ssa_lookup_table:
+                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
                 else:
-                    cur_line = self.ssa_line(None,cur_line,next_line,op)
+                    cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op)
             elif self.checkFor('divToken'):
                 op = 'DIV'
                 next_line = self.factor()
                 r = ssa_line(None, cur_line, next_line, op)
                 r = r.to_tuple()
-                if r in self.ssa_lookup_table:
-                    cur_line = self.ssa_lookup_table[r]
+                if r in self.block_collection[self.current_block].ssa_lookup_table:
+                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
                 else:
-                    cur_line = self.ssa_line(None, cur_line, next_line, op)
+                    cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op)
         return cur_line
-
 
     def expression(self):
         cur_line = self.term()
@@ -422,23 +589,22 @@ class Parser:
                 next_line = self.term()
                 r = ssa_line(None, cur_line, next_line, op)
                 r = r.to_tuple()
-                if r in self.ssa_lookup_table:
-                    cur_line = self.ssa_lookup_table[r]
+                if r in self.block_collection[self.current_block].ssa_lookup_table:
+                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
                 else:
-                    cur_line = self.ssa_line(None, cur_line, next_line, op)
+                    cur_line = self.write_line_to_block(self.current_block,None,cur_line, next_line, op)
 
             elif self.checkFor('minusToken'):
                 op = "SUB"
                 next_line = self.term()
                 r = ssa_line(None, cur_line, next_line, op)
                 r = r.to_tuple()
-                if r in self.ssa_lookup_table:
-                    cur_line = self.ssa_lookup_table[r]
+                if r in self.block_collection[self.current_block].ssa_lookup_table:
+                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
                 else:
-                    cur_line = self.ssa_line(None, cur_line, next_line, op)
+                    cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op)
 
         return cur_line
-
 
     def designator(self):
         bool0, value, number_value, text = self.checkFor('ident')
@@ -451,7 +617,7 @@ class Parser:
         if arr == True:
             None
 
-        return self.var_space[text],text
+        return self.block_collection[self.current_block].var_space[text], text
 
     def typeDecl(self):
         if self.checkFor("varToken"):
@@ -467,21 +633,23 @@ class Parser:
             return "array"
 
     def varDecl(self):
-        '''
+
+        constant_blcok_0 = self.create_block(None,None,None,None,{},{})
 
 
+        block_1 = self.create_block(None, None, None, None, {}, {})
+        self.block_collection[constant_blcok_0].next_block = block_1
+        self.current_block = block_1
 
-        '''
-
-        self.ssa_line(0,None,None,None)
         self.typeDecl()
         _, _, _, text = self.checkFor("ident")
-        self.var_space[text] = self.constant_space[0]
+        self.block_collection[block_1].var_space[text] = None
         while self.checkFor("commaToken", test=True):
             self.checkFor("commaToken")
             _, _, _, text = self.checkFor("ident")
-            self.var_space[text] = self.constant_space[0]
+            self.block_collection[block_1].var_space[text] = None
         self.checkFor("semiToken")
+        return block_1
 
     def returnStatement(self):
         self.checkFor("returnToken")
