@@ -3,13 +3,20 @@
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import graphviz
-
+from graphviz import Digraph
+import copy
 debug = True
 
-import copy
+s = Digraph('struct',filename="control_flow_graph",node_attr={'shape':'record'})
+s.node('struct1', ' left| middle| right')
+s.node('struct2', ' one| two')
+s.node('struct3', r'hello\nworld |{ b |{c| d|e}| f}| g | h')
+s.edges([('struct1:f1', 'struct2:f0'), ('struct1:f2', 'struct3:here')])
+s.view()
 
 
-def print_hi(name):
+
+def print_graph(name):
     fo = open("foo.txt", "w")
     print("文件名: ", fo.name)
     print("是否已关闭 : ", fo.closed)
@@ -287,6 +294,26 @@ class Parser:
     constant_space = {}
 
     current_block = None
+'''
+s = Digraph('struct',filename="control_flow_graph",node_attr={'shape':'record'})
+s.node('struct1', ' left| middle| right')
+s.node('struct2', ' one| two')
+s.node('struct3', r'hello\nworld |{ b |{c| d|e}| f}| g | h')
+s.edges([('struct1:f1', 'struct2:f0'), ('struct1:f2', 'struct3:here')])
+s.view()
+'''
+    def dot_graph(self,name):
+        s = Digraph('struct', filename=name, node_attr={'shape': 'record'})
+        for block_number,block in self.block_collection.items():
+            layout_text = "BB "+str(block_number) +" | {"
+            for line in block.ssa_lines:
+                if line[1] == None:
+                    layout_text =
+
+
+
+
+
 
     def create_block(self, dbn, ft, branch, next_block, slt,vs):
         b = Basic_block(self.block_count,dbn, ft, branch, next_block, slt,vs)
