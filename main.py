@@ -6,13 +6,15 @@ import graphviz
 from graphviz import Digraph
 import copy
 debug = True
-
+'''
 s = Digraph('struct',filename="control_flow_graph",node_attr={'shape':'record'})
 s.node('struct1', ' left| middle| right')
 s.node('struct2', ' one| two')
 s.node('struct3', r'hello\nworld |{ b |{c| d|e}| f}| g | h')
 s.edges([('struct1:f1', 'struct2:f0'), ('struct1:f2', 'struct3:here')])
 s.view()
+'''
+
 
 
 
@@ -264,6 +266,7 @@ class Basic_block:
     first_ssa_line_number = None
     ssa_lookup_table = {}
     var_space = {}
+    previous = []
 
     def __init__(self, bn, dbn, ft, branch, next_block, slt,vs):
         self.block_number = bn
@@ -276,6 +279,13 @@ class Basic_block:
         self.ssa_lines=[]
 
 
+
+s = Digraph('struct',filename="control_flow_graph",node_attr={'shape':'record'})
+s.node('struct1', ' left| middle| right')
+s.node('struct2', ' one| two')
+s.node('struct3', r'hello\nworld |{ b |{c| d|e}| f}| g | h')
+s.edges([('struct1:f1', 'struct2:f0'), ('struct1:f2', 'struct3:here')])
+s.view()
 
 
 
@@ -294,21 +304,34 @@ class Parser:
     constant_space = {}
 
     current_block = None
-'''
-s = Digraph('struct',filename="control_flow_graph",node_attr={'shape':'record'})
-s.node('struct1', ' left| middle| right')
-s.node('struct2', ' one| two')
-s.node('struct3', r'hello\nworld |{ b |{c| d|e}| f}| g | h')
-s.edges([('struct1:f1', 'struct2:f0'), ('struct1:f2', 'struct3:here')])
-s.view()
-'''
+
     def dot_graph(self,name):
         s = Digraph('struct', filename=name, node_attr={'shape': 'record'})
         for block_number,block in self.block_collection.items():
             layout_text = "BB "+str(block_number) +" | {"
             for line in block.ssa_lines:
-                if line[1] == None:
-                    layout_text =
+                if len(line) == 2:
+                    layout_text =  layout_text  + str(line[0]) +": const" + " " + str(line [1]) +" |"
+                else:
+                    layout_text = layout_text + str(line[0])+ ": " + str(line [3]) + " "+str(line [1])+ " " +str(line [2]) +" |"
+            if layout_text[-1] == "|":
+                layout_text = layout_text[:-1]
+            layout_text = layout_text + "}"
+            s.node(str(block_number) ,layout_text)
+        for block_number, block in self.block_collection.items():
+            next_block = self.block_collection[block_number].next_block
+            ft = self.block_collection[block_number].fall_through
+            branch = self.block_collection[block_number].branch
+            if next_block != None:
+                s.edge(str(block_number),str(next_block))
+            if ft != None:
+                s.edge(str(block_number),str(ft),label = "fall_through")
+            if branch != None:
+                s.edge(str(block_number),str(branch ),label = "branch")
+
+
+        s.view()
+        None
 
 
 
@@ -432,7 +455,15 @@ s.view()
         self.checkFor("callToken")
         bool0, value, number_value, text  = self.checkFor('ident')
         if text == "InputNum":
+            if self.checkFor('openparenToken', test=True):
+                self.checkFor('openparenToken')
+                self.expression()
+                while self.checkFor('commaToken', test=True):
+                    self.checkFor('commaToken')
+                    self.expression()
+                self.checkFor('closeparenToken')
             return self.write_line_to_block(self.current_block,None,None,None,"READ")
+
 
         if self.checkFor('openparenToken',test=True):
             self.checkFor('openparenToken')
@@ -480,31 +511,49 @@ s.view()
         '''
         ft_block_number = self.create_block(dom_block,None,None,None,self.block_collection[dom_block].ssa_lookup_table,
                                             self.block_collection[dom_block].var_space)
+        self.block_collection[ft_block_number].previous.append(dom_block)
         branch_block_number = self.create_block(dom_block, None, None, None,
                                               self.block_collection[dom_block].ssa_lookup_table,
                                               self.block_collection[dom_block].var_space)
+        self.block_collection[branch_block_number].previous.append(dom_block)
         exit_block_number = self.create_block(dom_block,None,None,None,self.block_collection[dom_block].ssa_lookup_table,
                                             self.block_collection[dom_block].var_space)
-        self.block_collection[dom_block].branch = branch_block_number
-        self.block_collection[dom_block].fall_through = ft_block_number
+        self.block_collection[branch_block_number].previous.append(ft_block_number)
+        self.block_collection[branch_block_number].previous.append(branch_block_number)
+        front_block_number = None
+
+        if self.block_collection[dom_block].branch != None:
+            self.block_collection[exit_block_number].branch = self.block_collection[dom_block].branch
+            self.block_collection[dom_block].branch = branch_block_number
+        else:
+            self.block_collection[dom_block].branch = branch_block_number
+        if self.block_collection[dom_block].fall_through != None:
+            self.block_collection[exit_block_number].fall_through = self.block_collection[dom_block].fall_through
+            self.block_collection[dom_block].fall_through = ft_block_number
+        else:
+            self.block_collection[dom_block].fall_through = ft_block_number
+
         self.block_collection[branch_block_number].fall_through = exit_block_number
         self.block_collection[ft_block_number].branch = exit_block_number
 
         self.current_block = ft_block_number
         self.statSequence()
+
         if not self.block_collection[ft_block_number].ssa_lines:
             self.write_line_to_block(ft_block_number,None,None,None,None)
 
+        if not self.block_collection[exit_block_number].ssa_lines:
+            self.write_line_to_block(exit_block_number,None,None,None,None)
 
-        self.current_block = exit_block_number
-        for key,val in self.block_collection[dom_block].var_space.items():
-            if self.block_collection[ft_block_number].var_space[key] != val:
-                line_number = self.write_line_to_block(self.current_block,None,self.block_collection[ft_block_number].var_space[key],val,'PHI')
-                self.block_collection[exit_block_number].var_space[key] = line_number
 
         if  self.block_collection[exit_block_number].ssa_lines:
+            branch_back = self.block_collection[exit_block_number]
             first_line_number =  self.block_collection[exit_block_number].ssa_lines[0][0]
-            self.write_line_to_block(ft_block_number,None,first_line_number,None,"BRA")
+            for key,val in self.block_collection.items():
+                if  val.branch  == exit_block_number:
+                    self.write_line_to_block(key, None, first_line_number, None, "BRA")
+
+
 
 
 
@@ -531,21 +580,57 @@ s.view()
             self.block_collection[ft_block_number].ssa_lookup_table[(cmp_line,first_line_number,branch_key[2])] =branch_line_number
             self.block_collection[exit_block_number].ssa_lookup_table[(cmp_line,first_line_number,branch_key[2])] =branch_line_number
 
-            self.current_block = exit_block_number
-            for key, val in self.block_collection[dom_block].var_space.items():
-                if self.block_collection[branch_block_number].var_space[key] != val:
-                    line_number = self.write_line_to_block(self.current_block, None,
-                                                           self.block_collection[branch_block_number].var_space[key], val,
-                                                           'PHI')
-                    self.block_collection[exit_block_number].var_space[key] = line_number
+
+
+        self.current_block = exit_block_number
+        ft_val =None
+        branch_val = None
+
+        for key, val in self.block_collection.items():
+            if val.branch == exit_block_number:
+                branch_before_exit = key
+            elif val.fall_through == exit_block_number:
+                ft_before_exit = key
+
+        for key, val in self.block_collection[dom_block].var_space.items():
+            ft_val = self.block_collection[ft_before_exit].var_space[key]
+            branch_val = self.block_collection[branch_before_exit].var_space[key]
+            if val != branch_val and val == ft_val:
+                line_number = self.write_line_to_block(self.current_block, None,
+                                                       branch_val, val,
+                                                       'PHI')
+                self.block_collection[exit_block_number].var_space[key] = line_number
+            elif   val == branch_val and val != ft_val:
+                line_number = self.write_line_to_block(self.current_block, None,
+                                                       ft_val, val,
+                                                       'PHI')
+                self.block_collection[exit_block_number].var_space[key] = line_number
+            elif val != branch_val and val != ft_val:
+                line_number = self.write_line_to_block(self.current_block, None,
+                                                       branch_val, ft_val,
+                                                       'PHI')
+                self.block_collection[exit_block_number].var_space[key] = line_number
 
         self.checkFor("fiToken")
 
     def whileStatement(self):
-        self.checkFor('whileToken')
-        type,cmp_line  = self.relation()
         dom_block = self.current_block
-        self.checkFor('thenToken')
+
+        join_block_number = self.create_block(dom_block, None, None, None,
+                                              self.block_collection[dom_block].ssa_lookup_table,
+                                              self.block_collection[dom_block].var_space)
+        do_block_number = self.create_block(dom_block, None, None, None,
+                                            self.block_collection[dom_block].ssa_lookup_table,
+                                            self.block_collection[dom_block].var_space)
+        exit_block_number = self.create_block(dom_block, None, None, None,
+                                              self.block_collection[dom_block].ssa_lookup_table,
+                                              self.block_collection[dom_block].var_space)
+        self.block_collection[dom_block].next_block = join_block_number
+
+        self.checkFor('whileToken')
+        self.current_block = join_block_number
+        type,cmp_line  = self.relation()
+
         branch_key = None
         if type == 20:
             self.write_line_to_block(self.current_block, None, cmp_line, None, "BNE")
@@ -565,8 +650,17 @@ s.view()
         if type == 25:
             self.write_line_to_block(self.current_block, None, cmp_line, None, "BLE")
             branch_key = (cmp_line, None, "BLE")
+
+
+
         self.checkFor("doToken")
+        self.current_block = do_block_number
         self.statSequence()
+
+
+
+
+
         self.checkFor("odToken")
 
     def factor(self):
@@ -729,6 +823,7 @@ s.view()
         self.checkFor("beginToken")
         self.statSequence()
         self.checkFor("endToken")
+        self.dot_graph("test")
         self.checkFor('periodToken')
 
 
