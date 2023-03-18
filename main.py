@@ -347,11 +347,15 @@ class Parser:
         self.block_count = self.block_count + 1
         return r
 
-    def write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op):
+    def write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op,front=False):
         if ssa_line_const != None:
             r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
             r = r.to_tuple()
-            self.block_collection[bn].ssa_lines.append((self.ssa_count,ssa_line_const))
+            if front == False:
+                self.block_collection[bn].ssa_lines.append((self.ssa_count,ssa_line_const))
+            else:
+                self.block_collection[bn].ssa_lines.insert(0,
+                                                           (self.ssa_count, ssa_line_source_1, ssa_line_source_2, op))
             self.constant_space[ssa_line_const] = self.ssa_count
             r = self.ssa_count
             self.ssa_count = self.ssa_count + 1
@@ -359,7 +363,10 @@ class Parser:
         else:
             r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
             r = r.to_tuple()
-            self.block_collection[bn].ssa_lines.append((self.ssa_count,  ssa_line_source_1, ssa_line_source_2, op))
+            if front == False:
+                self.block_collection[bn].ssa_lines.append((self.ssa_count,  ssa_line_source_1, ssa_line_source_2, op))
+            else:
+                self.block_collection[bn].ssa_lines.insert(0,(self.ssa_count, ssa_line_source_1, ssa_line_source_2, op))
             if op == "READ"  or op == None:
                 r = self.ssa_count
                 self.ssa_count = self.ssa_count + 1
@@ -477,29 +484,7 @@ class Parser:
 
     def ifStatement(self):
         self.checkFor('ifToken')
-        type,cmp_line = self.relation()
-        dom_block =  self.current_block
-        self.checkFor('thenToken')
-        branch_key = None
 
-        if type == 20:
-            self.write_line_to_block(self.current_block,None,cmp_line,None,"BNE")
-            branch_key = (cmp_line,None,"BNE")
-        if type == 21:
-            self.write_line_to_block(self.current_block,None,cmp_line,None,"BEQ")
-            branch_key = ( cmp_line, None, "BEQ")
-        if type == 22:
-            self.write_line_to_block(self.current_block,None,cmp_line,None,"BGE")
-            branch_key = (cmp_line, None, "BGE")
-        if type == 23:
-            self.write_line_to_block(self.current_block,None,cmp_line,None,"BLE")
-            branch_key = (cmp_line, None, "BLE")
-        if type == 24:
-            self.write_line_to_block(self.current_block,None,cmp_line,None,"BGT")
-            branch_key = ( cmp_line, None, "BGE")
-        if type == 25:
-            self.write_line_to_block(self.current_block,None,cmp_line,None,"BLE")
-            branch_key = ( cmp_line, None, "BLE")
         '''
         block_number = None
         dom_block_number = None
@@ -511,6 +496,7 @@ class Parser:
         ssa_lookup_table = {}
         var_space = {}
         '''
+        dom_block = self.current_block
         ft_block_number = self.create_block(dom_block,None,None,None,self.block_collection[dom_block].ssa_lookup_table,
                                             self.block_collection[dom_block].var_space)
         self.block_collection[ft_block_number].previous.append(dom_block)
@@ -523,6 +509,32 @@ class Parser:
         self.block_collection[branch_block_number].previous.append(ft_block_number)
         self.block_collection[branch_block_number].previous.append(branch_block_number)
         front_block_number = None
+        type, cmp_line = self.relation()
+
+        self.checkFor('thenToken')
+        branch_key = None
+
+        if not self.block_collection[branch_block_number].ssa_lines:
+            first_branch_line = self.write_line_to_block(branch_block_number, None, None, None, None)
+
+        if type == 20:
+            self.write_line_to_block(self.current_block, None, cmp_line, first_branch_line, "BNE")
+            branch_key = (cmp_line, first_branch_line, "BNE")
+        if type == 21:
+            self.write_line_to_block(self.current_block, None, cmp_line, first_branch_line, "BEQ")
+            branch_key = (cmp_line, first_branch_line, "BEQ")
+        if type == 22:
+            self.write_line_to_block(self.current_block, None, cmp_line, first_branch_line, "BGE")
+            branch_key = (cmp_line,first_branch_line, "BGE")
+        if type == 23:
+            self.write_line_to_block(self.current_block, None, cmp_line, first_branch_line, "BLE")
+            branch_key = (cmp_line, first_branch_line, "BLE")
+        if type == 24:
+            self.write_line_to_block(self.current_block, None, cmp_line, first_branch_line, "BGT")
+            branch_key = (cmp_line, first_branch_line, "BGE")
+        if type == 25:
+            self.write_line_to_block(self.current_block, None, cmp_line, first_branch_line, "BLE")
+            branch_key = (cmp_line, first_branch_line, "BLE")
 
         if self.block_collection[dom_block].branch != None:
             self.block_collection[exit_block_number].branch = self.block_collection[dom_block].branch
@@ -540,12 +552,14 @@ class Parser:
 
         self.current_block = ft_block_number
         self.statSequence()
+        if not self.block_collection[exit_block_number].ssa_lines:
+            exit_first_line = self.write_line_to_block(exit_block_number,None,None,None,None)
 
         if not self.block_collection[ft_block_number].ssa_lines:
             self.write_line_to_block(ft_block_number,None,None,None,None)
 
-        if not self.block_collection[exit_block_number].ssa_lines:
-            self.write_line_to_block(exit_block_number,None,None,None,None)
+
+
 
 
         if  self.block_collection[exit_block_number].ssa_lines:
@@ -615,6 +629,15 @@ class Parser:
 
         self.checkFor("fiToken")
 
+
+    def while_join_block_modifier(self,current_join_block_stack):
+
+        None
+
+
+
+
+
     def whileStatement(self):
         dom_block = self.current_block
 
@@ -627,43 +650,66 @@ class Parser:
         exit_block_number = self.create_block(dom_block, None, None, None,
                                               self.block_collection[dom_block].ssa_lookup_table,
                                               self.block_collection[dom_block].var_space)
+
         self.block_collection[dom_block].next_block = join_block_number
+        self.block_collection[join_block_number].fall_through = do_block_number
+        self.block_collection[do_block_number].branch = join_block_number
+        self.block_collection[join_block_number].branch = exit_block_number
+
+        if not self.block_collection[exit_block_number].ssa_lines:
+            self.write_line_to_block(exit_block_number,None,None,None,None)
+
+        exit_first_line = self.block_collection[exit_block_number].ssa_lines[0][0]
+
+
 
         self.checkFor('whileToken')
         self.current_block = join_block_number
         type,cmp_line  = self.relation()
 
+
+
         branch_key = None
         if type == 20:
-            self.write_line_to_block(self.current_block, None, cmp_line, None, "BNE")
-            branch_key = (cmp_line, None, "BNE")
+            self.write_line_to_block(self.current_block, None, cmp_line, exit_first_line, "BNE")
+            branch_key = (cmp_line, exit_first_line, "BNE")
         if type == 21:
-            self.write_line_to_block(self.current_block, None, cmp_line, None, "BEQ")
-            branch_key = (cmp_line, None, "BEQ")
+            self.write_line_to_block(self.current_block, None, cmp_line, exit_first_line, "BEQ")
+            branch_key = (cmp_line, exit_first_line, "BEQ")
         if type == 22:
-            self.write_line_to_block(self.current_block, None, cmp_line, None, "BGE")
-            branch_key = (cmp_line, None, "BGE")
+            self.write_line_to_block(self.current_block, None, cmp_line, exit_first_line, "BGE")
+            branch_key = (cmp_line, exit_first_line, "BGE")
         if type == 23:
-            self.write_line_to_block(self.current_block, None, cmp_line, None, "BLE")
-            branch_key = (cmp_line, None, "BLE")
+            self.write_line_to_block(self.current_block, None, cmp_line, exit_first_line, "BLE")
+            branch_key = (cmp_line, exit_first_line, "BLE")
         if type == 24:
-            self.write_line_to_block(self.current_block, None, cmp_line, None, "BGT")
-            branch_key = (cmp_line, None, "BGE")
+            self.write_line_to_block(self.current_block, None, cmp_line, exit_first_line, "BGT")
+            branch_key = (cmp_line, exit_first_line, "BGE")
         if type == 25:
-            self.write_line_to_block(self.current_block, None, cmp_line, None, "BLE")
-            branch_key = (cmp_line, None, "BLE")
+            self.write_line_to_block(self.current_block, None, cmp_line, exit_first_line, "BLE")
+            branch_key = (cmp_line, exit_first_line, "BLE")
 
 
 
         self.checkFor("doToken")
         self.current_block = do_block_number
+
         self.statSequence()
+        for key,val in self.block_collection[join_block_number].var_space.items():
+            do_val= self.block_collection[do_block_number].var_space[key]
+            line_number = self.write_line_to_block(join_block_number, None,
+                                                       do_val, val,
+                                                       'PHI',True)
+            self.block_collection[join_block_number].var_space[key]  = line_number
+
 
 
 
 
 
         self.checkFor("odToken")
+
+
 
     def factor(self):
         if self.checkFor('ident', test=True):

@@ -6,6 +6,9 @@ var a, i;
     while i < 10 do
         let a <- a*(i + 2);
         let i <- i + 1;
+        if i < 0 then
+           let a <- a+1;
+        fi;
     od;
 
     call OutputNum(a);
