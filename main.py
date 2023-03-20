@@ -402,12 +402,12 @@ class Parser:
 
     def update_line_to_block(self,bn):
         None
-    def write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op,front=False,replace=False,is_designator_1 =False,is_designator_2 =False,text_1=None,text_2=None):
+    def write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op,front=False,replace=False,is_designator_1 =False,is_designator_2 =False,text_1=None,text_2=None,insert =False,insert_i=-1):
         if ssa_line_const != None:
             r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
             r = r.to_tuple()
 
-            self.block_collection[bn].ssa_lines.append((self.ssa_count, ssa_line_const))
+            self.block_collection[bn].ssa_lines.append([self.ssa_count, ssa_line_const])
             self.constant_space[ssa_line_const] = self.ssa_count
             r = self.ssa_count
             self.ssa_count = self.ssa_count + 1
@@ -416,10 +416,22 @@ class Parser:
         else:
             r = ssa_line(ssa_line_const, ssa_line_source_1, ssa_line_source_2, op)
             r = r.to_tuple()
+            if insert == True:
+                self.block_collection[bn].ssa_lines.insert(insert_i,[self.ssa_count,  ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designator_2,[text_1],[text_2]])
+
             if front == False:
-                self.block_collection[bn].ssa_lines.append((self.ssa_count,  ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designator_2,text_1,text_2))
+                self.block_collection[bn].ssa_lines.append([self.ssa_count,  ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designator_2,[text_1],[text_2]])
+                if op == "READ" or op == None:
+                    r = self.ssa_count
+                    self.ssa_count = self.ssa_count + 1
+                    return r
+                self.block_collection[bn].ssa_lookup_table[r] = self.ssa_count
+                r = self.ssa_count
+                self.ssa_count = self.ssa_count + 1
+
+                return r
             else:
-                self.block_collection[bn].ssa_lines.insert(0,(self.ssa_count, ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designator_2,text_1,text_2))
+                self.block_collection[bn].ssa_lines.insert(0,[self.ssa_count, ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designator_2,[text_1],[text_2]])
             if op == "READ"  or op == None:
                 r = self.ssa_count
                 self.ssa_count = self.ssa_count + 1
@@ -753,25 +765,31 @@ class Parser:
                     if op[0:3] != 'PHI':
                         if op != "READ":
                             del self.block_collection[start_block].ssa_lookup_table[(line_a, line_b, op)]
+
                 if op != None and op != "READ":
                     if op[0:3] == 'PHI':
                         var_name = op[4:]
                         target = self.find_var_line_number_r(var_name, self.block_collection[start_block].dom_block_number)
                         line_a = target
+
                     else:
-                        if line_a_text == ident:
+                        if ident in line_a_text:
                             if line_a_is_var:
-                                line_a = self.find_var_line_number_r(ident,start_block)
-                        if line_b_text == ident:
+                                self.block_collection[start_block].ssa_lines[i][6].remove(ident)
+                                line_a = self.find_var_line_number_r(ident,self.block_collection[start_block].dom_block_number)
+
+                        """
+                        write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op,front=False,replace=False,is_designator_1 =False,is_designator_2 =False,text_1=None,text_2=None,insert =False,insert_i=-1)
+                        """
+
+                        if ident in line_b_text :
                             if line_b_is_var:
-                                line_b = self.find_var_line_number_r(ident,start_block)
+                                line_b = self.find_var_line_number_r(ident,self.block_collection[start_block].dom_block_number)
 
 
-
-
-
-
-
+                    """
+                    
+                    """
                 if op != None and op != "READ":
                     self.block_collection[start_block].ssa_lines[i] = (
                         line_number, line_a, line_b, op, line_a_is_var, line_b_is_var, line_a_text, line_b_text)
@@ -1011,6 +1029,15 @@ class Parser:
                 r = r.to_tuple()
                 if r in self.block_collection[self.current_block].ssa_lookup_table:
                     cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
+                    actual_ssa_line = self.find_line(self.current_block, cur_line)
+                    if actual_ssa_line:
+                        if actual_ssa_line[4]:
+                            if text_1 not in actual_ssa_line[6]:
+                                self.block_collection[bn].ssa_lines[ln][6].append(text_1)
+                        if actual_ssa_line[5]:
+                            if text_2 not in actual_ssa_line[7]:
+                                self.block_collection[bn].ssa_lines[ln][7].append(text_2)
+                    None
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,is_designator_1=is_designator_1,is_designator_2=is_designator_2,text_1=text_1,text_2=text_2)
 
@@ -1021,13 +1048,33 @@ class Parser:
                 r = r.to_tuple()
                 if r in self.block_collection[self.current_block].ssa_lookup_table:
                     cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
+                    actual_ssa_line = self.find_line(self.current_block, cur_line)
+                    if actual_ssa_line:
+                        if actual_ssa_line[4]:
+                            if text_1 not in actual_ssa_line[6]:
+                                self.block_collection[bn].ssa_lines[ln][6].append(text_1)
+                        if actual_ssa_line[5]:
+                            if text_2 not in actual_ssa_line[7]:
+                                self.block_collection[bn].ssa_lines[ln][7].append(text_2)
+                    None
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,is_designator_1=is_designator_1,is_designator_2=is_designator_2,text_1=text_1,text_2=text_2)
 
         return cur_line,is_designator_1,text_1
 
+
+    def find_line(self,bn,ln):
+        for bn,block in  self.block_collection.items():
+            for i in range(len (block.ssa_lines)):
+                if block.ssa_lines[i][0] == ln:
+                    return block.ssa_lines[i],bn,i
+
+
+
+
     def expression(self):
         cur_line,is_designator_1,text_1 = self.term()
+        cur_line_copy = cur_line
         while self.checkFor('plusToken', test=True) or self.checkFor('minusToken', test=True):
 
             if self.checkFor('plusToken'):
@@ -1037,6 +1084,16 @@ class Parser:
                 r = r.to_tuple()
                 if r in self.block_collection[self.current_block].ssa_lookup_table:
                     cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
+                    actual_ssa_line,bn,ln = self.find_line(self.current_block, cur_line)
+                    if actual_ssa_line:
+                        if actual_ssa_line[4]:
+                            if text_1 not in actual_ssa_line[6]:
+                                self.block_collection[bn].ssa_lines[ln][6].append(text_1)
+                        if actual_ssa_line[5]:
+                            if text_2 not in actual_ssa_line[7]:
+                                self.block_collection[bn].ssa_lines[ln][7].append(text_2)
+
+                    None
 
                 else:
                     cur_line = self.write_line_to_block(self.current_block,None,cur_line, next_line, op,is_designator_1=is_designator_1,is_designator_2=is_designator_2,text_1=text_1,text_2=text_2)
@@ -1049,6 +1106,16 @@ class Parser:
                 r = r.to_tuple()
                 if r in self.block_collection[self.current_block].ssa_lookup_table:
                     cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
+
+                    actual_ssa_line = self.find_line(self.current_block, cur_line)
+                    if actual_ssa_line:
+                        if actual_ssa_line[4]:
+                            if text_1 not in actual_ssa_line[6]:
+                                self.block_collection[bn].ssa_lines[ln][6].append(text_1)
+                        if actual_ssa_line[5]:
+                            if text_2 not in actual_ssa_line[7]:
+                                self.block_collection[bn].ssa_lines[ln][7].append(text_2)
+                    None
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,is_designator_1=is_designator_1,is_designator_2=is_designator_2,text_1=text_1,text_2=text_2)
 
