@@ -630,12 +630,12 @@ class Parser:
 
             self.checkFor("elseToken")
             self.current_block = branch_block_number
-            self.statSequence()
+            last_block = self.statSequence()
             if not self.block_collection[branch_block_number].ssa_lines:
                 self.write_line_to_block(branch_block_number, None, None, None, None)
             first_line_number =  self.block_collection[branch_block_number].ssa_lines[0][0]
             branch_line_number = self.block_collection[dom_block].ssa_lines[-1][0]
-            new_branch_line = (branch_line_number,cmp_line,first_line_number,branch_key[2],False,False)
+            new_branch_line = (branch_line_number,cmp_line,first_line_number,branch_key[2],False,False,None,None)
             self.block_collection[dom_block].ssa_lines[-1] =new_branch_line
 
 
@@ -657,28 +657,62 @@ class Parser:
             elif val.fall_through == exit_block_number:
                 ft_before_exit = key
 
-        for key, val in self.block_collection[dom_block].var_space.items():
-            ft_val = self.block_collection[ft_before_exit].var_space[key]
-            branch_val = self.block_collection[branch_before_exit].var_space[key]
-            if val != branch_val and val == ft_val:
-                line_number = self.write_line_to_block(self.current_block, None,
-                                                       branch_val, val,
-                                                       'PHI')
-                self.block_collection[exit_block_number].var_space[key] = line_number
-                self.block_collection[exit_block_number].var_space_end[key]  = exit_block_number
+        modify_list_1 = copy.deepcopy(self.block_collection[branch_before_exit].var_space)
+        track_back = branch_before_exit
+        while track_back != dom_block:
+            for key, line in self.block_collection[track_back].var_space.items():
+                if key not in modify_list_1:
+                    modify_list_1[key] = line
+            track_back = self.block_collection[track_back].dom_block_number
 
-            elif   val == branch_val and val != ft_val:
+
+        modify_list_2 = copy.deepcopy(self.block_collection[ft_before_exit].var_space)
+        track_back = ft_before_exit
+        while track_back != dom_block:
+            for key, line in self.block_collection[track_back].var_space.items():
+                if key not in modify_list_2:
+                    modify_list_2[key] = line
+            track_back = self.block_collection[track_back].dom_block_number
+
+        merged_keys = []
+        for key_1,line_ in modify_list_1.items():
+            if key_1 not in merged_keys:
+                merged_keys.append(key_1)
+
+        for key_2,line_ in modify_list_2.items():
+            if key_2 not in merged_keys:
+                merged_keys.append(key_2)
+
+
+
+        for key in merged_keys:
+            line = self.find_var_line_number_r(key,dom_block)
+            if key in modify_list_1 and key in modify_list_2:
                 line_number = self.write_line_to_block(self.current_block, None,
-                                                       ft_val, val,
-                                                       'PHI')
+                                                       modify_list_1[key], modify_list_2[key],
+                                                       'PHI-'+key)
                 self.block_collection[exit_block_number].var_space[key] = line_number
                 self.block_collection[exit_block_number].var_space_end[key] = exit_block_number
-            elif val != branch_val and val != ft_val:
+            elif key in modify_list_1 and key not in modify_list_2:
                 line_number = self.write_line_to_block(self.current_block, None,
-                                                       branch_val, ft_val,
-                                                       'PHI')
+                                                       modify_list_1[key], line,
+                                                       'PHI-'+key)
                 self.block_collection[exit_block_number].var_space[key] = line_number
                 self.block_collection[exit_block_number].var_space_end[key] = exit_block_number
+
+            elif key not in modify_list_1 and key  in modify_list_2:
+                line_number = self.write_line_to_block(self.current_block, None,
+                                                       modify_list_2[key], line,
+                                                       'PHI-'+key)
+                self.block_collection[exit_block_number].var_space[key] = line_number
+                self.block_collection[exit_block_number].var_space_end[key] = exit_block_number
+
+
+
+
+
+
+
 
 
         self.checkFor("fiToken")

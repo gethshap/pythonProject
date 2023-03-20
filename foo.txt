@@ -19,6 +19,12 @@ var a, b, c;
 
         let a <- a - 1;
     od;
-
     let c <- a + 0;
+    if a == 0 then
+        let a <- a -1;
+    else
+        let b <- a + 22;
+    fi;
+
+    let c <- a + 55;
 }.
