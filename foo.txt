@@ -1,15 +1,24 @@
 main
-var a, i;
+
+var a, b, c;
+
 {
-    let a <- call InputNum();
-    let i <- 0;
-    while i < 10 do
-        let a <- a*(i + 2);
-        let i <- i + 1;
-        if i < 0 then
-           let a <- a+1;
-        fi;
+    let a <- 0;
+    let b <- 0;
+    let c<- 0 ;
+    while a < 99
+    do
+        let c <- a + 0;
+
+        let b <- 0;
+        while b < 17
+        do
+            let a <- a + 1;
+            let b <- b + 1;
+        od;
+
+        let a <- a - 1;
     od;
 
-    call OutputNum(a);
+    let c <- a + 0;
 }.
