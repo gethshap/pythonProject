@@ -1133,6 +1133,8 @@ class Parser:
         return cur_line,is_designator_1,text_1
 
     def trace_array_operation(self,key,type):
+        None
+
 
     def designator(self):
         bool0, value, number_value, text = self.checkFor('ident')
@@ -1171,6 +1173,8 @@ class Parser:
             key_add_line = (self.arr_adress_space[text], "BASE","ADD")
             key_adda_line =( mul_line, add_line, "ADDA")
             key_load_line = (adda_line, None, "LOAD")
+
+
 
 
 
