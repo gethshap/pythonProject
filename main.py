@@ -193,7 +193,7 @@ class tokenizer:
             while self.inputSystem.isalpha() or self.inputSystem.isdigit():
                 str += self.inputSystem
                 self.next()
-        if self.inputSystem == ' ' or self.inputSystem == '\n' or self.inputSystem == ';':
+        if self.inputSystem == ' ' or self.inputSystem == '\n' or self.inputSystem == ';'or self.inputSystem == "[":
 
             if str == 'then':
                 return token(41, 'then', 'thenToken', None)
@@ -266,6 +266,7 @@ class Basic_block:
     first_ssa_line_number = None
     ssa_lookup_table = {}
     var_space = {}
+    arr_space = {}
     previous = []
 
     def __init__(self, bn, dbn, ft, branch, next_block, slt,vs,var_space_db_end):
@@ -278,6 +279,7 @@ class Basic_block:
         self.ssa_lookup_table_initial = copy.deepcopy(self.ssa_lookup_table)
         self.var_space = {}
         self.var_space_end = {}
+        self.arr_space = {}
         self.ssa_lines=[]
 
 
@@ -304,9 +306,22 @@ class Parser:
     block_count = 0
     block_collection = {}
     ssa_count = 1
-
+    arr_adress_space= {}
     constant_space = {}
 
+    """
+    mul_line = self.write_line_to_block(self.current_block,None,arr_index[0],self.arr_size,"MUL")
+    add_line = self.write_line_to_block(self.current_block,None,self.arr_adress_space[text],"BASE","ADD")
+    adda_line = self.write_line_to_block(self.current_block,None,mul_line,add_line,"ADDA")
+    load_line = self.write_line_to_block(self.current_block,None,adda_line,None,"LOAD")
+    
+    
+    """
+    load_trace_entry = {"mul":None,"add":None,"adda":None,"load":None}
+    mul_transition_table = {}
+    add_transition_table = {}
+    adda_transition_table = {}
+    load_transition_table = {}
     current_block = None
 
     def dot_graph(self,name):
@@ -729,7 +744,8 @@ class Parser:
 
         self.checkFor("fiToken")
         return exit_block_number
-
+    def break_line(self):
+        None
 
     def while_join_block_modifier(self,start_block,key_pairs,visited):
 
@@ -775,21 +791,15 @@ class Parser:
                     else:
                         if ident in line_a_text:
                             if line_a_is_var:
-                                self.block_collection[start_block].ssa_lines[i][6].remove(ident)
                                 line_a = self.find_var_line_number_r(ident,self.block_collection[start_block].dom_block_number)
 
-                        """
-                        write_line_to_block(self,bn,ssa_line_const, ssa_line_source_1, ssa_line_source_2, op,front=False,replace=False,is_designator_1 =False,is_designator_2 =False,text_1=None,text_2=None,insert =False,insert_i=-1)
-                        """
+
 
                         if ident in line_b_text :
                             if line_b_is_var:
                                 line_b = self.find_var_line_number_r(ident,self.block_collection[start_block].dom_block_number)
 
 
-                    """
-                    
-                    """
                 if op != None and op != "READ":
                     self.block_collection[start_block].ssa_lines[i] = (
                         line_number, line_a, line_b, op, line_a_is_var, line_b_is_var, line_a_text, line_b_text)
@@ -1122,23 +1132,72 @@ class Parser:
 
         return cur_line,is_designator_1,text_1
 
+    def trace_array_operation(self,key,type):
+
     def designator(self):
         bool0, value, number_value, text = self.checkFor('ident')
         arr = False
+
+        arr_index = []
         while self.checkFor('openbracketToken', test=True):
             arr = True
             self.checkFor('openbracketToken')
-            self.expression()
+            cur_line,is_designator_1,text_1 = self.expression()
+            arr_index.append(cur_line)
             self.checkFor('closebracketToken')
+
         if arr == True:
-            None
-        return self.find_var_line_number(text),text
+            """
+            8 mul size i
+            9 add address_of a base
+            10 adda 8 9
+            11 load 10
+            """
+            mul_line,add_line,adda_line,load_line = None,None,None,None
+            if self.load_trace_entry["mul"] == None:
+                mul_line = self.write_line_to_block(self.current_block, None, arr_index[0], self.arr_size, "MUL")
+                self.load_trace_entry["mul"] = mul_line
+            if self.load_trace_entry["add"] == None:
+                add_line = self.write_line_to_block(self.current_block, None, self.arr_adress_space[text], "BASE","ADD")
+                self.load_trace_entry["add"] = add_line
+            if self.load_trace_entry["adda"] == None:
+                adda_line = self.write_line_to_block(self.current_block, None, mul_line, add_line, "ADDA")
+                self.load_trace_entry["adda"] =adda_line
+            if self.load_trace_entry["load"] == None:
+                load_line = self.write_line_to_block(self.current_block, None, adda_line, None, "LOAD")
+                self.load_trace_entry["load"] = load_line
+
+            key_mul_line = (arr_index[0], self.arr_size, "MUL")
+            key_add_line = (self.arr_adress_space[text], "BASE","ADD")
+            key_adda_line =( mul_line, add_line, "ADDA")
+            key_load_line = (adda_line, None, "LOAD")
+
+
+
+
+
+
+
+
+
+            return load_line,text
+
+        else:
+            return self.find_var_line_number(text), text
+
+
+
+
+
+
 
 
     def typeDecl(self):
-        if self.checkFor("varToken"):
+        if self.checkFor("varToken",test= True):
+            self.checkFor("varToken")
             return "var"
-        elif self.checkFor("arrToken"):
+        elif self.checkFor("arrToken",test=True):
+            self.checkFor("arrToken")
             self.checkFor("openbracketToken")
             self.checkFor("number")
             self.checkFor("closebracketToken")
@@ -1149,23 +1208,38 @@ class Parser:
             return "array"
 
     def varDecl(self):
+        if not self.block_collection:
 
-        constant_blcok_0 = self.create_block(None,None,None,None,{},{})
+            constant_blcok_0 = self.create_block(None, None, None, None, {}, {})
+            block_1 = self.create_block(None, None, None, None, {}, {})
+            self.block_collection[constant_blcok_0].next_block = block_1
+            self.current_block = block_1
+            self.arr_size = self.write_line_to_block(0, 4, None, None, None)
 
-
-        block_1 = self.create_block(None, None, None, None, {}, {})
-        self.block_collection[constant_blcok_0].next_block = block_1
-        self.current_block = block_1
-
-        self.typeDecl()
-        _, _, _, text = self.checkFor("ident")
-        self.block_collection[block_1].var_space[text] = None
-        while self.checkFor("commaToken", test=True):
-            self.checkFor("commaToken")
+        type = self.typeDecl()
+        if type == "var":
             _, _, _, text = self.checkFor("ident")
-            self.block_collection[block_1].var_space[text] = None
-        self.checkFor("semiToken")
-        return block_1
+            self.block_collection[1].var_space[text] = None
+            while self.checkFor("commaToken", test=True):
+                self.checkFor("commaToken")
+                _, _, _, text = self.checkFor("ident")
+                self.block_collection[1].var_space[text] = None
+            self.checkFor("semiToken")
+            return 1
+        else:
+            _, _, _, text = self.checkFor("ident")
+            self.block_collection[1].arr_space[text] = None
+            line = self.write_line_to_block(0, "address of " + text, None, None, None)
+            self.arr_adress_space[text] = line
+            while self.checkFor("commaToken", test=True):
+                self.checkFor("commaToken")
+                _, _, _, text = self.checkFor("ident")
+                line = self.write_line_to_block(0,"address of "+text,None,None,None)
+                self.arr_adress_space[text] = line
+                self.block_collection[1].arr_space[text] = None
+            self.checkFor("semiToken")
+            return 1
+
 
     def returnStatement(self):
         self.checkFor("returnToken")
@@ -1220,6 +1294,9 @@ class Parser:
     def Parse(self):
         self.checkFor('mainToken')  # main
         self.varDecl()
+        while self.checkFor('varToken', test=True) or self.checkFor('arrToken', test=True):
+            self.varDecl()
+
         self.checkFor("beginToken")
         self.statSequence()
         self.checkFor("endToken")

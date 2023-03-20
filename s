@@ -1,6 +1,6 @@
 main
 
-var i, j, x,y;
+var i, j, x;
 array[10] a;
 
 {
@@ -8,7 +8,6 @@ array[10] a;
     let j <- call InputNum();
 
     let x <- a[i];
-    let y <- a[i]+1;
 
 
 }.
