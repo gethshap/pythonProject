@@ -5,7 +5,7 @@ var a, b, c;
 {
     let a <- 0;
     let b <- 0;
-    let c<- 0 ;
+    let c<- 0;
     while a < 99
     do
         let c <- a + 0;
