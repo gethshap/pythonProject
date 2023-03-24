@@ -33,3 +33,82 @@
         else:
             return self.find_var_line_number(text), text,False
 '''
+
+       for i in range (len(self.block_collection[join_block_number].ssa_lines)):
+            if self.block_collection[join_block_number].ssa_lines[i].var_1:
+                cp_i = i
+                var_name = self.block_collection[join_block_number].ssa_lines[i].var_1.split("-")[0]
+                index = self.block_collection[join_block_number].ssa_lines[i].var_1.split("-")[1:]
+                if not index:
+                    break
+
+
+                mul_node = Node((int(index[0]), self.word_size, "MUL"))
+                add_node = Node((self.arr_adress_space[var_name], "BASE", "ADD"))
+                mul_line = self.trace_load_store(join_block_number, mul_node, flag="mul")
+                if mul_line == None:
+                    mul_line = self.write_line_to_block(join_block_number, None, index[0], self.word_size, "MUL",insert=True,insert_i=i)
+                    self.block_collection[join_block_number].load_store_trace.mul.add_first(mul_node, mul_line)
+
+                add_line = self.trace_load_store(join_block_number, add_node, flag="add")
+                if add_line == None:
+                    add_line = self.write_line_to_block(join_block_number, None, self.arr_adress_space[var_name], "BASE",
+                                                        "ADD",insert=True,insert_i=i)
+                    self.block_collection[join_block_number].load_store_trace.add.add_first(add_node, add_line)
+
+                adda_node = Node((mul_line, add_line, "ADDA"))
+
+                adda_line = self.write_line_to_block(join_block_number, None, mul_line, add_line, "ADDA",insert=True,insert_i=i)
+                self.block_collection[join_block_number].load_store_trace.adda.add_first(adda_node, adda_line)
+
+                load_node = Node((adda_line, None, "LOAD"))
+                load_line = self.write_line_to_block(join_block_number, None, adda_line, None, "LOAD",insert=True,insert_i=i+1)
+                self.block_collection[join_block_number].load_store_trace.load.add_first(load_node, load_line)
+                old_val = self.block_collection[join_block_number].ssa_lines[i + 2].ssa_line_source_1
+                self.block_collection[join_block_number].ssa_lines[i+2].ssa_line_source_1 = load_line
+
+
+                self.update_load(join_block_number, old_val, load_line, {}, join_block_number)
+
+            if self.block_collection[join_block_number].ssa_lines[i].var_2:
+                var_name = self.block_collection[join_block_number].ssa_lines[i].var_2.split("-")[0]
+                index = self.block_collection[join_block_number].ssa_lines[i].var_2.split("-")[1:]
+                if not index:
+                    break
+                for i in range(len(self.block_collection[join_block_number].ssa_lines)):
+                    if self.block_collection[join_block_number].ssa_lines[i].var_1:
+                        cp_i = i
+                        var_name = self.block_collection[join_block_number].ssa_lines[i].var_1.split("-")[0]
+                        index = self.block_collection[join_block_number].ssa_lines[i].var_1.split("-")[1:]
+
+                        mul_node = Node((int(index[0]), self.word_size, "MUL"))
+                        add_node = Node((self.arr_adress_space[var_name], "BASE", "ADD"))
+                        mul_line = self.trace_load_store(join_block_number, mul_node, flag="mul")
+                        if mul_line == None:
+                            mul_line = self.write_line_to_block(join_block_number, None, index[0], self.word_size,
+                                                                "MUL", insert=True, insert_i=i)
+                            self.block_collection[join_block_number].load_store_trace.mul.add_first(mul_node, mul_line)
+
+                        add_line = self.trace_load_store(join_block_number, add_node, flag="add")
+                        if add_line == None:
+                            add_line = self.write_line_to_block(join_block_number, None,
+                                                                self.arr_adress_space[var_name], "BASE",
+                                                                "ADD", insert=True, insert_i=i)
+                            self.block_collection[join_block_number].load_store_trace.add.add_first(add_node, add_line)
+
+                        adda_node = Node((mul_line, add_line, "ADDA"))
+
+                        adda_line = self.write_line_to_block(join_block_number, None, mul_line, add_line, "ADDA",
+                                                             insert=True, insert_i=i)
+                        self.block_collection[join_block_number].load_store_trace.adda.add_first(adda_node, adda_line)
+
+                        load_node = Node((adda_line, None, "LOAD"))
+                        load_line = self.write_line_to_block(join_block_number, None, adda_line, None, "LOAD",
+                                                             insert=True, insert_i=i + 1)
+                        self.block_collection[join_block_number].load_store_trace.load.add_first(load_node, load_line)
+
+                        old_val = self.block_collection[join_block_number].ssa_lines[i + 2].ssa_line_source_2
+
+                        self.block_collection[join_block_number].ssa_lines[i + 2].ssa_line_source_2 = load_line
+
+                        self.update_load(join_block_number,old_val,load_line,{},join_block_number)

@@ -295,7 +295,7 @@ class ssa_line:
     op = None
     ssa_line_target = None
 
-    def __init__(self, ssa_line_number,ssa_line_target, ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designaotor_2,var_target,var_1,var_2,active=True,const=False):
+    def __init__(self, ssa_line_number,ssa_line_target, ssa_line_source_1, ssa_line_source_2, op,is_designator_1,is_designaotor_2,var_target,var_1,var_2,active=True,const=False,a1=[],a2=[]):
         self.ln = ssa_line_number
         if const == True:
             self.const = True
@@ -399,6 +399,7 @@ class Parser:
     arr_adress_space = {}
     constant_space = {}
     store_table = {}
+    non_active_triger = {}
 
     """
     mul_line = self.write_line_to_block(self.current_block,None,arr_index[0],self.arr_size,"MUL")
@@ -408,6 +409,7 @@ class Parser:
     """
     load_store_trace = load_trace_back()
     current_block = None
+    load_lookup_table  = {}
 
     def dot_graph(self, name):
         s = Digraph('struct', filename=name, node_attr={'shape': 'record'})
@@ -491,7 +493,7 @@ class Parser:
     def write_line_to_block(self, bn, ssa_line_const, ssa_line_source_1, ssa_line_source_2, op, front=False,
                             replace=False,var_target= None, is_designator_1=False, is_designator_2=False, text_1=None, text_2=None,
                             insert=False, insert_i=-1,active=True):
-        if ssa_line_const != None:
+        if ssa_line_const != None and op != "WRITE":
             const_line = ssa_line(self.ssa_count,ssa_line_const,None,None,None,None,None,None,None,None,const=True)
             ssa_key = const_line.to_tuple()
             self.block_collection[bn].ssa_lines.append(const_line)
@@ -505,6 +507,14 @@ class Parser:
             ssa_key = line.to_tuple()
             if insert == True:
                 self.block_collection[bn].ssa_lines.insert(insert_i,line)
+                if op == "READ" or op == None:
+                    r = self.ssa_count
+                    self.ssa_count = self.ssa_count + 1
+                    return r
+                self.block_collection[bn].ssa_lookup_table[ssa_key] = self.ssa_count
+                r = self.ssa_count
+                self.ssa_count = self.ssa_count + 1
+                return r
             if front == False:
                 self.block_collection[bn].ssa_lines.append(
                     line)
@@ -562,9 +572,9 @@ class Parser:
     def number(self):
         _, v, nv, t = self.checkFor('number')
         if nv in self.constant_space:
-            return self.constant_space[nv]
+            return self.constant_space[nv],t
         else:
-            return self.write_line_to_block(0, nv, None, None, None)
+            return self.write_line_to_block(0, nv, None, None, None),str(nv)
 
     def assignment(self):
         self.checkFor('letToken')
@@ -615,7 +625,7 @@ class Parser:
                 self.checkFor('openparenToken')
                 cur_line, is_designator_1, text_1 = self.expression()
                 self.checkFor('closeparenToken')
-            return self.write_line_to_block(self.current_block, cur_line, None, None, "WRITE")
+            return self.write_line_to_block(self.current_block, None, cur_line, None, "WRITE")
 
 
 
@@ -767,7 +777,12 @@ class Parser:
         for key_2, line_ in modify_list_2.items():
             if key_2 not in merged_keys:
                 merged_keys.append(key_2)
-
+        for key,_ in self.store_table.items():
+            if self.test_connect(key,exit_block_number):
+                line_number = self.write_line_to_block(self.current_block, None,
+                                                       None, None,
+                                                       "KILL")
+                self.block_collection[exit_block_number].store_kill_switch = True
         for key in merged_keys:
             line = self.find_var_line_number_r(key, dom_block)
             if key in modify_list_1 and key in modify_list_2:
@@ -823,6 +838,17 @@ class Parser:
 
     def non_active_line_modifier(self, start_block, modified_line,var_name, visited,source):
 
+
+        for var_name,line in self.block_collection[start_block].var_space.items():
+            if line == modified_line:
+                for i in range(len(self.block_collection[start_block].ssa_lines)):
+                    if self.block_collection[start_block].ssa_lines[i].var_target == var_name and self.block_collection[start_block].ssa_lines[i].active==False:
+                        old_val = self.block_collection[start_block].var_space[var_name]
+                        self.block_collection[start_block].var_space[var_name] =   self.block_collection[start_block].ssa_lines[i].ln
+                        self.block_collection[start_block].ssa_lines[i].active = True
+                        self.while_join_block_modifier(start_block,(var_name,source,self.block_collection[start_block].ssa_lines[i].ln),{},start_block)
+
+
         if self.block_collection[start_block].next_block and self.block_collection[
             start_block].next_block not in visited:
             visited[start_block] = 1
@@ -834,19 +860,142 @@ class Parser:
             start_block].fall_through not in visited:
             visited[start_block] = 1
             self.non_active_line_modifier(self.block_collection[start_block].fall_through, modified_line,var_name ,visited,source)
-        for var_name,line in self.block_collection[start_block].var_space.items():
-            if line == modified_line:
-                for i in range(len(self.block_collection[start_block].ssa_lines)):
-                    if self.block_collection[start_block].ssa_lines[i].var_target == var_name and self.block_collection[start_block].ssa_lines[i].active==False:
-                        old_val = self.block_collection[start_block].var_space[var_name]
-                        self.block_collection[start_block].var_space[var_name] =   self.block_collection[start_block].ssa_lines[i].ln
-                        self.block_collection[start_block].ssa_lines[i].active = True
-                        self.while_join_block_modifier(start_block,(var_name,source,self.block_collection[start_block].ssa_lines[i].ln),{},start_block)
+
+
+
+    def has_kill(self,bn,target):
+
+        if bn == target:
+            return False
+        if self.block_collection[bn].store_kill_switch:
+            return True
+        else:
+            dbn = self.block_collection[bn].dom_block_number
+            return self.has_kill(dbn,target)
+
+    def update_load_phase2(self,current_block,old,new,visited):
+        for var,line in self.block_collection[current_block].var_space.items():
+            if line == old:
+                self.block_collection[current_block].var_space[var] = new
+                self.non_active_line_modifier(current_block,old,var,{},current_block)
+
+
+
+
+        for i in range(len(self.block_collection[current_block].ssa_lines)):
+            line_number = self.block_collection[current_block].ssa_lines[i].ln
+            op = self.block_collection[current_block].ssa_lines[i].op
+            line_a = self.block_collection[current_block].ssa_lines[i].ssa_line_source_1
+            line_b = self.block_collection[current_block].ssa_lines[i].ssa_line_source_2
+            line_a_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_1
+            line_b_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_2
+            line_a_text = self.block_collection[current_block].ssa_lines[i].var_1
+            line_b_text = self.block_collection[current_block].ssa_lines[i].var_2
+            line_target  = self.block_collection[current_block].ssa_lines[i].var_target
+
+
+            if line_a == old:
+                self.block_collection[current_block].ssa_lines[i].ssa_line_source_1 = new
+                if self.block_collection[current_block].ssa_lines[i].active == False:
+                    self.block_collection[current_block].ssa_lines[i].active = True
+                    CSE = self.non_active_triger[self.block_collection[current_block].ssa_lines[i].ln]
+                    self.update_load_phase2( current_block, CSE, self.block_collection[current_block].ssa_lines[i].ln,
+                                             {})
+
+
+            if line_b == old:
+                self.block_collection[current_block].ssa_lines[i].ssa_line_source_2 = new
+                if self.block_collection[current_block].ssa_lines[i].active == False:
+                    self.block_collection[current_block].ssa_lines[i].active = True
+                    CSE = self.non_active_triger[self.block_collection[current_block].ssa_lines[i].ln]
+                    self.update_load_phase2(current_block, CSE, self.block_collection[current_block].ssa_lines[i].ln,
+                                            {})
+
+            if self.block_collection[current_block].next_block and self.block_collection[
+                current_block].next_block not in visited:
+                visited[current_block] = 1
+                self.update_load_phase2(self.block_collection[current_block].next_block, old,new,visited)
+            if self.block_collection[current_block].branch and self.block_collection[
+                current_block].branch not in visited:
+                visited[current_block] = 1
+                self.update_load_phase2(self.block_collection[current_block].branch,  old,new,visited)
+            if self.block_collection[current_block].fall_through and self.block_collection[
+                current_block].fall_through not in visited:
+                visited[current_block] = 1
+                self.update_load_phase2(self.block_collection[current_block].fall_through,   old,new,visited)
+
+
+
+
+    def update_load(self,current_block,join_block_number,visited):
+
+
+
+        for i in range(len(self.block_collection[current_block].ssa_lines)):
+            line_number = self.block_collection[current_block].ssa_lines[i].ln
+            op = self.block_collection[current_block].ssa_lines[i].op
+            line_a = self.block_collection[current_block].ssa_lines[i].ssa_line_source_1
+            line_b = self.block_collection[current_block].ssa_lines[i].ssa_line_source_2
+            line_a_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_1
+            line_b_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_2
+            line_a_text = self.block_collection[current_block].ssa_lines[i].var_1
+            line_b_text = self.block_collection[current_block].ssa_lines[i].var_2
+            line_target  = self.block_collection[current_block].ssa_lines[i].var_target
+
+
+
+
+            if line_a in self.load_lookup_table:
+                tuple = self.load_lookup_table[line_a]
+                target_bn = tuple[0]
+                line = tuple[1]
+                if self.has_kill(current_block,target_bn):
+                    adda_line = self.write_line_to_block(current_block,None,line.ssa_line_source_1,
+                                                         line.ssa_line_source_2,line.op,var_target=line.var_target
+                                            ,is_designator_1=line.is_designator_1,is_designator_2=line.is_designator_2,text_1=
+                                                         line.var_1,text_2=line.var_2,insert_i=i,insert=True)
+                    load_line = self.write_line_to_block(current_block, None, adda_line, None, "LOAD", insert=True,
+                                                         insert_i=i + 1)
+                    old_val = self.block_collection[current_block].ssa_lines[i+2].ssa_line_source_1
+                    new_val = load_line
+                    self.block_collection[current_block].ssa_lines[i+2].ssa_line_source_1 = load_line
+                    self.update_load_phase2(current_block,old_val,new_val,{})
 
 
 
 
 
+
+
+
+            if line_b in self.load_lookup_table:
+                tuple = self.load_lookup_table[line_b]
+                bn = tuple[0]
+                line = tuple[1]
+                if self.has_kill(current_block, target_bn):
+                    adda_line = self.write_line_to_block(current_block, None, line.ssa_line_source_1,
+                                                         line.ssa_line_source_2, line.op, var_target=line.var_target
+                                                         , is_designator_1=line.isdesignator_1,
+                                                         is_designator_2=line.is_designator_2, text_1=
+                                                         line.var_1, text_2=line.var_2, insert_i=i, insert=True)
+                    load_line = self.write_line_to_block(current_block, None, adda_line, None, "LOAD", insert=True,
+                                                         insert_i=i + 1)
+                    old_val = self.block_collection[current_block].ssa_lines[i + 2].ssa_line_source_2
+                    new_val = load_line
+                    self.block_collection[current_block].ssa_lines[i+2].ssa_line_source_2 = load_line
+                    self.update_load_phase2(current_block, old_val, new_val, {})
+
+        if self.block_collection[current_block].next_block and self.block_collection[
+            current_block].next_block not in visited:
+            visited[current_block] = 1
+            self.update_load(self.block_collection[current_block].next_block,join_block_number ,visited)
+        if self.block_collection[current_block].branch and self.block_collection[current_block].branch not in visited:
+            visited[current_block] = 1
+            self.update_load(self.block_collection[current_block].branch,join_block_number, visited)
+        if self.block_collection[current_block].fall_through and self.block_collection[
+            current_block].fall_through not in visited:
+            visited[current_block] = 1
+            self.update_load(self.block_collection[current_block].fall_through ,join_block_number,visited)
 
 
 
@@ -942,6 +1091,8 @@ class Parser:
                             self.block_collection[current_block].ssa_lines[i].ssa_line_source_2 = target_line
                             self. del_ssa((line_a, line_b, op), self.current_block)
                             self.block_collection[current_block].ssa_lookup_table[(line_a, target_line, op)] = line_number
+        if ident in  self.block_collection[current_block].var_space:
+            return
 
         if self.block_collection[current_block].next_block and self.block_collection[
             current_block].next_block not in visited:
@@ -1037,6 +1188,30 @@ class Parser:
         for key, line in self.block_collection[do_block_number].var_space.items():
             if key not in modify_list:
                 modify_list[key] = line
+        for key,_ in self.store_table.items():
+            if self.test_connect(key,join_block_number):
+                line_number = self.write_line_to_block(join_block_number, None,
+                                                       None, None,
+                                                       "KILL",front=True)
+                self.block_collection[join_block_number].store_kill_switch = True
+                break
+
+        self.update_load(join_block_number,join_block_number,{})
+
+
+
+
+
+
+
+
+
+
+
+        #mul_node = Node((, self.word_size, "MUL"))
+        #add_node = Node((self.arr_adress_space[text], "BASE", "ADD"))
+
+
 
         for key,_ in modify_list.items():
             old_val = self.find_var_line_number_r(key, join_block_number)
@@ -1115,7 +1290,7 @@ class Parser:
             line_number, text,_ = self.designator()
             return line_number, True, text
         elif self.checkFor('number', test=True):
-            line_number = self.number()
+            line_number,t = self.number()
             return line_number, False, None
         elif self.checkFor('openparenToken', test=True):
             self.checkFor('openparenToken')
@@ -1140,10 +1315,12 @@ class Parser:
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False)
                     cur_line = find_ssa
+                    self.non_active_triger[non_active_line]= find_ssa
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                         is_designator_1=is_designator_1,
                                                         is_designator_2=is_designator_2, text_1=text_1, text_2=text_2)
+
 
             elif self.checkFor('divToken'):
                 op = 'DIV'
@@ -1157,6 +1334,7 @@ class Parser:
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False)
                     cur_line = find_ssa
+                    self.non_active_triger[non_active_line] = find_ssa
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                         is_designator_1=is_designator_1,
@@ -1188,7 +1366,9 @@ class Parser:
                                                                is_designator_1=is_designator_1,
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False, var_target=target_val)
+
                     cur_line = find_ssa
+                    self.non_active_triger[non_active_line] = find_ssa
 
 
 
@@ -1216,6 +1396,7 @@ class Parser:
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False,var_target=target_val)
                     cur_line = find_ssa
+                    self.non_active_triger[non_active_line] = find_ssa
                     None
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
@@ -1233,7 +1414,7 @@ class Parser:
             if node.data in self.block_collection[bn].load_store_trace.mul:
                 return self.block_collection[bn].load_store_trace.mul.ln[node.data]
             else:
-                if bn == 1 or self.block_collection[bn].store_kill_switch == True:
+                if bn == 1 :
                     return None
                 dbn = self.block_collection[bn].dom_block_number
                 return  self.trace_load_store(dbn,node,flag)
@@ -1241,7 +1422,7 @@ class Parser:
             if node.data in self.block_collection[bn].load_store_trace.add:
                 return  self.block_collection[bn].load_store_trace.add.ln[node.data]
             else:
-                if bn == 1 or self.block_collection[bn].store_kill_switch == True:
+                if bn == 1 :
                     return None
                 dbn = self.block_collection[bn].dom_block_number
                 return self.trace_load_store(dbn, node, flag)
@@ -1249,31 +1430,39 @@ class Parser:
             if node.data in self.block_collection[bn].load_store_trace.adda:
                 return  self.block_collection[bn].load_store_trace.adda.ln[node.data]
             else:
+                if bn == 1 :
+                    return None
+                dbn = self.block_collection[bn].dom_block_number
+                return self.trace_load_store(dbn, node, flag)
+
+        elif flag == 'load' :
+            if node.data in self.block_collection[bn].load_store_trace.load:
+                return self.block_collection[bn].load_store_trace.load.ln[node.data]
+            else:
                 if bn == 1 or self.block_collection[bn].store_kill_switch == True:
                     return None
                 dbn = self.block_collection[bn].dom_block_number
                 return self.trace_load_store(dbn, node, flag)
 
-        elif flag == 'load' or self.block_collection[bn].store_kill_switch == True:
-            if node.data in self.block_collection[bn].load_store_trace.load:
-                return self.block_collection[bn].load_store_trace.load.ln[node.data]
-            else:
-                if bn == 1:
-                    return None
-                dbn = self.block_collection[bn].dom_block_number
-                return self.trace_load_store(dbn, node, flag)
-
+    def find_ssa_line(self, ln):
+        for k,v in self.block_collection.items():
+            for line in v.ssa_lines:
+                if line.ln == ln:
+                    return (k,line)
 
 
     def designator(self,store=False):
         bool0, value, number_value, text = self.checkFor('ident')
         arr = False
+        full_text = text
 
         arr_index = []
         while self.checkFor('openbracketToken', test=True):
             arr = True
             self.checkFor('openbracketToken')
             cur_line, is_designator_1, text_1 = self.expression()
+            full_text = full_text +"-" + str(cur_line)
+
             arr_index.append(cur_line)
             self.checkFor('closebracketToken')
 
@@ -1286,12 +1475,12 @@ class Parser:
             """
             mul_line, add_line, adda_line, load_line = None, None, None, None
 
-            mul_node = Node(( arr_index[0], self.arr_size, "MUL"))
+            mul_node = Node((arr_index[0], self.word_size, "MUL"))
             add_node = Node((self.arr_adress_space[text], "BASE","ADD"))
 
             mul_line =  self.trace_load_store(self.current_block,mul_node,flag="mul")
             if mul_line == None:
-                mul_line = self.write_line_to_block(self.current_block, None, arr_index[0], self.arr_size, "MUL")
+                mul_line = self.write_line_to_block(self.current_block, None, arr_index[0], self.word_size, "MUL")
                 self.block_collection[self.current_block].load_store_trace.mul.add_first(mul_node,mul_line)
 
             add_line =  self.trace_load_store(self.current_block,add_node,flag="add")
@@ -1313,38 +1502,47 @@ class Parser:
                     load_line = self.write_line_to_block(self.current_block, None, adda_line, None, "LOAD")
                     self.block_collection[self.current_block].load_store_trace.load.add_first(load_node, load_line)
 
+                    self.load_lookup_table[load_line] = self.find_ssa_line(adda_line)
 
-                return load_line, text, False
+                return load_line, full_text, False
             else:
-                if arr_index[0] not in self.constant_space:
+                if arr_index[0] not in self.constant_space.values():
                     self.block_collection[self.current_block].has_store = True
                     self.store_table[self.current_block ] = 1
-                return adda_line, text, True
+                return adda_line, full_text, True
         else:
             return self.find_var_line_number(text), text, False
 
 
 
     def test_connect(self, bn_s,bn_t,visited={}):
-        toDO
+        toDo = []
+        Done = []
+        toDo.append(bn_s)
+        while toDo :
+            e = toDo[0]
+            toDo.pop(0)
+            Done.append(e)
+            ne = []
+            if self.block_collection[e].next_block and self.block_collection[
+                e].next_block not in Done:
+                ne.append(self.block_collection[e].next_block)
+            if self.block_collection[e].branch and self.block_collection[
+                e].branch not in Done:
+                ne.append(self.block_collection[e].branch)
+            if self.block_collection[e].fall_through and self.block_collection[
+                e].fall_through not in Done:
+                ne.append(self.block_collection[e].fall_through)
 
-        if bn_s == bn_t:
-            return True
-        if self.block_collection[bn_s].next_block and self.block_collection[
-            bn_s].next_block not in visited:
-            visited[bn_s] = 1
-            if self.test_connect(self.block_collection[bn_s].next_block,bn_t,visited ):
-                return True
-        if self.block_collection[bn_s].branch and self.block_collection[bn_s].branch not in visited:
-            visited[bn_s] = 1
-            if self.test_connect(self.block_collection[bn_s].branch, bn_t , visited):
-                return True
-        if self.block_collection[bn_s].fall_through and self.block_collection[
-            bn_s].fall_through not in visited:
-            visited[bn_s] = 1
-            if self.test_connect(self.block_collection[bn_s].fall_through, bn_t,visited):
-                return True
+            for n in ne:
+                if n == bn_t:
+                    return True
+                if n  not in Done:
+                    toDo.append(n)
         return False
+
+
+
 
 
 
@@ -1382,7 +1580,7 @@ class Parser:
             block_1 = self.create_block(None, None, None, None, {}, {})
             self.block_collection[constant_blcok_0].next_block = block_1
             self.current_block = block_1
-            self.arr_size = self.write_line_to_block(0, 4, None, None, None)
+            self.word_size = self.write_line_to_block(0, 4, None, None, None)
 
         type = self.typeDecl()
         if type == "var":
@@ -1468,9 +1666,10 @@ class Parser:
         self.checkFor("beginToken")
         self.statSequence()
         self.checkFor("endToken")
-        print(self.test_connect(1,2))
-        print(self.test_connect(2,7))
-        print(self.test_connect(3,2))
+        print(self.has_kill(4,2))
+        print(self.has_kill(3, 2))
+        print(self.has_kill(3, 1))
+
         self.dot_graph("test")
         self.checkFor('periodToken')
 
