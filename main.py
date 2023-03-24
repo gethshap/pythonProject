@@ -361,12 +361,13 @@ class Basic_block:
         self.fall_through = ft
         self.branch = branch
         self.next_block = next_block
-        self.ssa_lookup_table = copy.deepcopy(slt)
-        self.ssa_lookup_table_initial = copy.deepcopy(self.ssa_lookup_table)
+        self.ssa_lookup_table = {}
+        self.ssa_lookup_table_initial = {}
         self.var_space = {}
         self.var_space_end = {}
         self.arr_space = {}
         self.ssa_lines = []
+        self.phi ={}
 
     def __repr__(self):
         return str(self.ssa_lines)
@@ -520,6 +521,7 @@ class Parser:
                 r = self.ssa_count
                 self.ssa_count = self.ssa_count + 1
                 return r
+
             self.block_collection[bn].ssa_lookup_table[ssa_key] = self.ssa_count
             r = self.ssa_count
             self.ssa_count = self.ssa_count + 1
@@ -799,6 +801,17 @@ class Parser:
     def break_line(self):
         None
 
+    def del_ssa(self,ssa_key,bn):
+        if ssa_key in self.block_collection[bn].ssa_lookup_table:
+            del self.block_collection[bn].ssa_lookup_table[ssa_key]
+        else:
+            dbn = self.block_collection[bn].dom_block_number
+            if dbn == None:
+                return None
+            else:
+                return self.del_ssa(ssa_key,dbn)
+
+
     def search_for_ssa(self,ssa_key,bn):
         if ssa_key in self.block_collection[bn].ssa_lookup_table:
             return self.block_collection[bn].ssa_lookup_table[ssa_key]
@@ -807,27 +820,30 @@ class Parser:
             if  dbn == None:
                 return None
             else:
-                return self.search_for_ssa(self,ssa_key,dbn)
+                return self.search_for_ssa(ssa_key,dbn)
 
-    def non_active_line_modifier(self, start_block, modified_line,var_name, visited):
+    def non_active_line_modifier(self, start_block, modified_line,var_name, visited,source):
 
         if self.block_collection[start_block].next_block and self.block_collection[
             start_block].next_block not in visited:
             visited[start_block] = 1
-            self.non_active_line_modifier(self.block_collection[start_block].next_block, modified_line,var_name, visited)
+            self.non_active_line_modifier(self.block_collection[start_block].next_block, modified_line,var_name, visited,source)
         if self.block_collection[start_block].branch and self.block_collection[start_block].branch not in visited:
             visited[start_block] = 1
-            self.non_active_line_modifier(self.block_collection[start_block].branch, modified_line,var_name, visited,)
+            self.non_active_line_modifier(self.block_collection[start_block].branch, modified_line,var_name, visited,source)
         if self.block_collection[start_block].fall_through and self.block_collection[
             start_block].fall_through not in visited:
             visited[start_block] = 1
-            self.non_active_line_modifier(self.block_collection[start_block].fall_through, modified_line,var_name ,visited)
+            self.non_active_line_modifier(self.block_collection[start_block].fall_through, modified_line,var_name ,visited,source)
         for var_name,line in self.block_collection[start_block].var_space.items():
             if line == modified_line:
                 for i in range(len(self.block_collection[start_block].ssa_lines)):
-                    if self.block_collection[start_block].ssa_lines[i].var_target == var_name:
+                    if self.block_collection[start_block].ssa_lines[i].var_target == var_name and self.block_collection[start_block].ssa_lines[i].active==False:
+                        old_val = self.block_collection[start_block].var_space[var_name]
                         self.block_collection[start_block].var_space[var_name] =   self.block_collection[start_block].ssa_lines[i].ln
                         self.block_collection[start_block].ssa_lines[i].active = True
+                        self.while_join_block_modifier(start_block,(var_name,source,self.block_collection[start_block].ssa_lines[i].ln),{},start_block)
+
 
 
 
@@ -852,7 +868,7 @@ class Parser:
         ident = key_pair[0]
         source = key_pair[1]
         target_line = key_pair[2]
-        '''
+
         if key_pair[0] in self.block_collection[current_block].phi and current_block != source_block:
 
             for i in range(len(self.block_collection[current_block].ssa_lines)):
@@ -870,34 +886,63 @@ class Parser:
                         if var_name == ident:
                             if line_a == source:
                                 self.block_collection[current_block].ssa_lines[i].active = True
-                                self.non_active_line_modifier(current_block, line_number, ident, {})
+                                self.non_active_line_modifier(current_block, line_number, ident, {},source)
                                 self.block_collection[current_block].ssa_lines[i].ssa_line_source_1 = target_line
                             if line_b == source:
                                 self.block_collection[current_block].ssa_lines[i].active = True
-                                self.non_active_line_modifier(current_block, line_number, ident, {})
+                                self.non_active_line_modifier(current_block, line_number, ident, {},source)
                                 self.block_collection[current_block].ssa_lines[i].ssa_line_source_2 = target_line
-                return
-        
-        
-        '''
+            return
 
 
 
 
+        for i in range(len(self.block_collection[current_block].ssa_lines)):
+            line_number = self.block_collection[current_block].ssa_lines[i].ln
+            op = self.block_collection[current_block].ssa_lines[i].op
+            line_a = self.block_collection[current_block].ssa_lines[i].ssa_line_source_1
+            line_b = self.block_collection[current_block].ssa_lines[i].ssa_line_source_2
+            line_a_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_1
+            line_b_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_2
+            line_a_text = self.block_collection[current_block].ssa_lines[i].var_1
+            line_b_text = self.block_collection[current_block].ssa_lines[i].var_2
+            line_target  = self.block_collection[current_block].ssa_lines[i].var_target
+
+            if op != None and op != "READ":
+                if op[0:3] == 'PHI':
+                    var_name = op[4:]
+                    target = self.find_var_line_number_r(var_name,
+                                                         self.block_collection[current_block].dom_block_number)
+
+                else:
+                    if ident == line_target and  self.block_collection[current_block].ssa_lines[i].active == False:
+                        self.block_collection[current_block].ssa_lines[i].active = True
+                        source = self.block_collection[current_block].var_space[ident]
+                        self.block_collection[current_block].ssa_lookup_table[(target_line, line_b, op)] = source
+                        self.block_collection[current_block].var_space[ident] = self.block_collection[current_block].ssa_lines[i].ln
+                        self.non_active_line_modifier(current_block, line_number, ident, {}, source)
+                        self.while_join_block_modifier(current_block,(ident,source,self.block_collection[current_block].ssa_lines[i].ln),{},current_block)
 
 
 
+                    if ident == line_a_text:
+                        if line_a_is_var:
 
-                
-                
+                            #unfinished
+                            self.block_collection[current_block].ssa_lines[i].active = True
+                            self.non_active_line_modifier(current_block, line_number, ident, {},source)
+                            self.block_collection[current_block].ssa_lines[i].ssa_line_source_1 = target_line
+                            self.del_ssa((line_a, line_b, op),self.current_block)
+                            self.block_collection[current_block].ssa_lookup_table[(target_line, line_b, op)] = line_number
 
 
-                
-
-
-
-
-
+                    if ident == line_b_text:
+                        if line_b_is_var:
+                            self.block_collection[current_block].ssa_lines[i].active = True
+                            self.non_active_line_modifier(current_block, line_number, ident, {},source)
+                            self.block_collection[current_block].ssa_lines[i].ssa_line_source_2 = target_line
+                            self. del_ssa((line_a, line_b, op), self.current_block)
+                            self.block_collection[current_block].ssa_lookup_table[(line_a, target_line, op)] = line_number
 
         if self.block_collection[current_block].next_block and self.block_collection[
             current_block].next_block not in visited:
@@ -912,41 +957,6 @@ class Parser:
             self.while_join_block_modifier(self.block_collection[current_block].fall_through, key_pair, visited, source_block)
 
 
-
-        for i in range(len(self.block_collection[current_block].ssa_lines)):
-            line_number = self.block_collection[current_block].ssa_lines[i].ln
-            op = self.block_collection[current_block].ssa_lines[i].op
-            line_a = self.block_collection[current_block].ssa_lines[i].ssa_line_source_1
-            line_b = self.block_collection[current_block].ssa_lines[i].ssa_line_source_2
-            line_a_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_1
-            line_b_is_var = self.block_collection[current_block].ssa_lines[i].is_designator_2
-            line_a_text = self.block_collection[current_block].ssa_lines[i].var_1
-            line_b_text = self.block_collection[current_block].ssa_lines[i].var_2
-
-            if op != None and op != "READ":
-                if op[0:3] == 'PHI':
-                    var_name = op[4:]
-                    target = self.find_var_line_number_r(var_name,
-                                                         self.block_collection[current_block].dom_block_number)
-
-                else:
-                    if ident == line_a_text:
-                        if line_a_is_var:
-                            self.block_collection[current_block].ssa_lines[i].active = True
-                            self.non_active_line_modifier(current_block, line_number, ident, {})
-                            self.block_collection[current_block].ssa_lines[i].ssa_line_source_1 = target_line
-                            del self.block_collection[current_block].ssa_lookup_table[(line_a, line_b, op)]
-                            self.block_collection[current_block].ssa_lookup_table[(target_line, line_b, op)] = line_number
-                            None
-
-                    if ident == line_b_text:
-                        if line_b_is_var:
-                            self.block_collection[current_block].ssa_lines[i].active = True
-                            self.non_active_line_modifier(current_block, line_number, ident, {})
-                            self.block_collection[current_block].ssa_lines[i].ssa_line_source_2 = target_line
-                            del self.block_collection[current_block].ssa_lookup_table[(line_a, line_b, op)]
-                            self.block_collection[current_block].ssa_lookup_table[(line_a, target_line, op)] = line_number
-                            None
         # self.block_collection[start_block].var_space[ident] = line_number
 
 
@@ -1031,6 +1041,7 @@ class Parser:
 
         for key,_ in modify_list.items():
             old_val = self.find_var_line_number_r(key, join_block_number)
+            self.while_join_block_modifier(join_block_number, (key, old_val, self.ssa_count), {}, join_block_number)
             val = self.find_var_line_number_r(key, last_block)
             line_number = self.write_line_to_block(join_block_number, None,
                                                    old_val, val,
@@ -1038,7 +1049,7 @@ class Parser:
             self.block_collection[join_block_number].phi[key] = 1
             self.block_collection[join_block_number].var_space[key] = line_number
             self.block_collection[join_block_number].var_space_end[key] = join_block_number
-            self.while_join_block_modifier(join_block_number, (key, old_val, line_number), {},join_block_number)
+            #self.while_join_block_modifier(join_block_number, (key, old_val, line_number), {},join_block_number)
 
 
 
@@ -1066,7 +1077,7 @@ class Parser:
                             line_a_is_var = self.block_collection[block_key].ssa_lines[i][4]
                             line_b_is_var = self.block_collection[block_key].ssa_lines[i][5]
                             if op != None and op !="READ":
-                                del self.block_collection[block_key].ssa_lookup_table[(line_a,line_b,op)]
+                                self.del_ssa((line_a, line_b, op), self.current_block)
                             if line_a == to_replace and line_a_is_var:
                                 line_a = terget_line
                                 line_a_is_var = False
@@ -1123,14 +1134,13 @@ class Parser:
                 next_line, is_designator_2, text_2 = self.factor()
                 r = ssa_line(None, cur_line, next_line, op)
                 r = r.to_tuple()
-                if r in self.block_collection[self.current_block].ssa_lookup_table:
-                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
-
-                    actual_ssa_line, bn, ln = self.find_line(self.current_block, cur_line)
+                find_ssa = self.search_for_ssa(r,self.current_block)
+                if find_ssa:
                     non_active_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                                is_designator_1=is_designator_1,
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False)
+                    cur_line = find_ssa
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                         is_designator_1=is_designator_1,
@@ -1140,14 +1150,14 @@ class Parser:
                 op = 'DIV'
                 next_line, is_designator_2, text_2 = self.factor()
                 r = ssa_line(None, cur_line, next_line, op)
-                r = r.to_tuple()
-                if r in self.block_collection[self.current_block].ssa_lookup_table:
-                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
-                    actual_ssa_line, bn, ln = self.find_line(self.current_block, cur_line)
+                find_ssa = self.search_for_ssa(r, self.current_block)
+                if find_ssa:
+
                     non_active_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                                is_designator_1=is_designator_1,
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False)
+                    cur_line = find_ssa
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                         is_designator_1=is_designator_1,
@@ -1171,15 +1181,16 @@ class Parser:
                 next_line, is_designator_2, text_2 = self.term()
                 line = ssa_line(self.ssa_count,None, cur_line, next_line, op,is_designator_1=is_designator_1,is_designaotor_2= is_designator_2,var_1=text_1,var_2=text_2,var_target=target_val)
                 ssa_key = line.to_tuple()
+                find_ssa = self.search_for_ssa(ssa_key, self.current_block)
 
 
-
-                if ssa_key in self.block_collection[self.current_block].ssa_lookup_table:
-                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[ssa_key]
-                    actual_ssa_line, bn, ln = self.find_line(self.current_block, cur_line)
+                if find_ssa:
                     non_active_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
-                                                        is_designator_1=is_designator_1,
-                                                        is_designator_2=is_designator_2, text_1=text_1, text_2=text_2,active=False,var_target=target_val)
+                                                               is_designator_1=is_designator_1,
+                                                               is_designator_2=is_designator_2, text_1=text_1,
+                                                               text_2=text_2, active=False, var_target=target_val)
+                    cur_line = find_ssa
+
 
 
 
@@ -1196,15 +1207,16 @@ class Parser:
                 next_line, is_designator_2, text_2 = self.term()
                 r = ssa_line(self.ssa_count, None, cur_line, next_line, op, is_designator_1=is_designator_1,is_designaotor_2= is_designator_2
                              , var_1=text_1, var_2=text_2,var_target=None)
-                r = r.to_tuple()
-                if r in self.block_collection[self.current_block].ssa_lookup_table:
-                    cur_line = self.block_collection[self.current_block].ssa_lookup_table[r]
+                find_ssa = self.search_for_ssa(ssa_key, self.current_block)
+                if find_ssa:
 
-                    actual_ssa_line, bn, ln = self.find_line(self.current_block, cur_line)
+
+
                     non_active_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
                                                                is_designator_1=is_designator_1,
                                                                is_designator_2=is_designator_2, text_1=text_1,
                                                                text_2=text_2, active=False,var_target=target_val)
+                    cur_line = find_ssa
                     None
                 else:
                     cur_line = self.write_line_to_block(self.current_block, None, cur_line, next_line, op,
