@@ -1,0 +1,35 @@
+'''
+            if mul_node.data in self.load_store_trace.mul:
+                mul_line = self.load_store_trace.mul.ln[mul_node.data]
+            else:
+                mul_line = self.write_line_to_block(self.current_block, None, arr_index[0], self.arr_size, "MUL")
+                self.load_store_trace.mul.add_first(mul_node,mul_line)
+
+            if (self.arr_adress_space[text], "BASE","ADD") in self.load_store_trace.add:
+                add_line = self.load_store_trace.add.ln[add_node.data]
+            else:
+                add_line = self.write_line_to_block(self.current_block, None, self.arr_adress_space[text], "BASE",
+                                                    "ADD")
+                self.load_store_trace.add.add_first(add_node,add_line)
+
+            adda_node =Node((mul_line, add_line, "ADDA"))
+            if (mul_line, add_line, "ADDA") in self.load_store_trace.adda:
+                adda_line = self.load_store_trace.adda.ln[adda_node.data]
+            else:
+                adda_line = self.write_line_to_block(self.current_block, None, mul_line, add_line, "ADDA")
+                self.load_store_trace.adda.add_first(adda_node,adda_line)
+
+            if store == False:
+                load_node = Node((adda_line, None, "LOAD"))
+                if (adda_line, None, "LOAD") in self.load_store_trace.load:
+                    load_line = self.load_store_trace.load.ln[load_node.data]
+                else:
+                    load_line = self.write_line_to_block(self.current_block, None, adda_line, None, "LOAD")
+                    self.load_store_trace.load.add_first(load_node, load_line)
+                return load_line, text, False
+            else:
+
+                return adda_line, text, True
+        else:
+            return self.find_var_line_number(text), text,False
+'''

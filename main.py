@@ -352,6 +352,7 @@ class Basic_block:
     previous =[]
     phi = {}
 
+
     has_store  = False
     store_kill_switch = False
 
@@ -368,6 +369,7 @@ class Basic_block:
         self.arr_space = {}
         self.ssa_lines = []
         self.phi ={}
+        self.load_store_trace = load_trace_back()
 
     def __repr__(self):
         return str(self.ssa_lines)
@@ -396,6 +398,7 @@ class Parser:
     ssa_count = 1
     arr_adress_space = {}
     constant_space = {}
+    store_table = {}
 
     """
     mul_line = self.write_line_to_block(self.current_block,None,arr_index[0],self.arr_size,"MUL")
@@ -565,9 +568,6 @@ class Parser:
 
     def assignment(self):
         self.checkFor('letToken')
-        if self.block_collection[self.current_block].store_kill_switch:
-            self.load_store_trace = load_trace_back()
-            self.block_collection[self.current_block].store_kill_switch = False
         line_number_for_dst, text, store = self.designator(store=True)
         self.checkFor('becomesToken')
         line_number, is_d, text_1 = self.expression(target_val= text)
@@ -794,8 +794,7 @@ class Parser:
                 self.block_collection[exit_block_number].var_space_end[key] = exit_block_number
 
         self.checkFor("fiToken")
-        if self.block_collection[ft_before_exit].has_store or self.block_collection[branch_before_exit].has_store or self.block_collection[ft_before_exit].store_kill_switch or self.block_collection[branch_before_exit].store_kill_switch:
-            self.block_collection[exit_block_number].store_kill_switch = True
+
         return exit_block_number
 
     def break_line(self):
@@ -1225,8 +1224,46 @@ class Parser:
 
         return cur_line, is_designator_1, text_1
 
-    def trace_array_operation(self, key, type):
-        None
+    def trace_load_store(self,bn,node,flag=None):
+
+
+
+
+        if flag == "mul":
+            if node.data in self.block_collection[bn].load_store_trace.mul:
+                return self.block_collection[bn].load_store_trace.mul.ln[node.data]
+            else:
+                if bn == 1 or self.block_collection[bn].store_kill_switch == True:
+                    return None
+                dbn = self.block_collection[bn].dom_block_number
+                return  self.trace_load_store(dbn,node,flag)
+        elif flag == "add":
+            if node.data in self.block_collection[bn].load_store_trace.add:
+                return  self.block_collection[bn].load_store_trace.add.ln[node.data]
+            else:
+                if bn == 1 or self.block_collection[bn].store_kill_switch == True:
+                    return None
+                dbn = self.block_collection[bn].dom_block_number
+                return self.trace_load_store(dbn, node, flag)
+        elif flag == "adda":
+            if node.data in self.block_collection[bn].load_store_trace.adda:
+                return  self.block_collection[bn].load_store_trace.adda.ln[node.data]
+            else:
+                if bn == 1 or self.block_collection[bn].store_kill_switch == True:
+                    return None
+                dbn = self.block_collection[bn].dom_block_number
+                return self.trace_load_store(dbn, node, flag)
+
+        elif flag == 'load' or self.block_collection[bn].store_kill_switch == True:
+            if node.data in self.block_collection[bn].load_store_trace.load:
+                return self.block_collection[bn].load_store_trace.load.ln[node.data]
+            else:
+                if bn == 1:
+                    return None
+                dbn = self.block_collection[bn].dom_block_number
+                return self.trace_load_store(dbn, node, flag)
+
+
 
     def designator(self,store=False):
         bool0, value, number_value, text = self.checkFor('ident')
@@ -1252,45 +1289,77 @@ class Parser:
             mul_node = Node(( arr_index[0], self.arr_size, "MUL"))
             add_node = Node((self.arr_adress_space[text], "BASE","ADD"))
 
-
-
-            if mul_node.data in self.load_store_trace.mul:
-                mul_line = self.load_store_trace.mul.ln[mul_node.data]
-            else:
+            mul_line =  self.trace_load_store(self.current_block,mul_node,flag="mul")
+            if mul_line == None:
                 mul_line = self.write_line_to_block(self.current_block, None, arr_index[0], self.arr_size, "MUL")
-                self.load_store_trace.mul.add_first(mul_node,mul_line)
+                self.block_collection[self.current_block].load_store_trace.mul.add_first(mul_node,mul_line)
 
-            if (self.arr_adress_space[text], "BASE","ADD") in self.load_store_trace.add:
-                add_line = self.load_store_trace.add.ln[add_node.data]
-            else:
+            add_line =  self.trace_load_store(self.current_block,add_node,flag="add")
+            if add_line == None:
                 add_line = self.write_line_to_block(self.current_block, None, self.arr_adress_space[text], "BASE",
                                                     "ADD")
-                self.load_store_trace.add.add_first(add_node,add_line)
+                self.block_collection[self.current_block].load_store_trace.add.add_first(add_node,add_line)
 
             adda_node =Node((mul_line, add_line, "ADDA"))
-            if (mul_line, add_line, "ADDA") in self.load_store_trace.adda:
-                adda_line = self.load_store_trace.adda.ln[adda_node.data]
-            else:
+            adda_line = self.trace_load_store(self.current_block, adda_node, flag="adda")
+            if adda_line == None:
                 adda_line = self.write_line_to_block(self.current_block, None, mul_line, add_line, "ADDA")
-                self.load_store_trace.adda.add_first(adda_node,adda_line)
+                self.block_collection[self.current_block].load_store_trace.adda.add_first(adda_node, adda_line)
 
             if store == False:
                 load_node = Node((adda_line, None, "LOAD"))
-                if (adda_line, None, "LOAD") in self.load_store_trace.load:
-                    load_line = self.load_store_trace.load.ln[load_node.data]
-                else:
+                load_line = self.trace_load_store(self.current_block,load_node,flag="load")
+                if load_line == None:
                     load_line = self.write_line_to_block(self.current_block, None, adda_line, None, "LOAD")
-                    self.load_store_trace.load.add_first(load_node, load_line)
+                    self.block_collection[self.current_block].load_store_trace.load.add_first(load_node, load_line)
+
+
                 return load_line, text, False
             else:
-
+                if arr_index[0] not in self.constant_space:
+                    self.block_collection[self.current_block].has_store = True
+                    self.store_table[self.current_block ] = 1
                 return adda_line, text, True
-
-
-
-
         else:
-            return self.find_var_line_number(text), text,False
+            return self.find_var_line_number(text), text, False
+
+
+
+    def test_connect(self, bn_s,bn_t,visited={}):
+        toDO
+
+        if bn_s == bn_t:
+            return True
+        if self.block_collection[bn_s].next_block and self.block_collection[
+            bn_s].next_block not in visited:
+            visited[bn_s] = 1
+            if self.test_connect(self.block_collection[bn_s].next_block,bn_t,visited ):
+                return True
+        if self.block_collection[bn_s].branch and self.block_collection[bn_s].branch not in visited:
+            visited[bn_s] = 1
+            if self.test_connect(self.block_collection[bn_s].branch, bn_t , visited):
+                return True
+        if self.block_collection[bn_s].fall_through and self.block_collection[
+            bn_s].fall_through not in visited:
+            visited[bn_s] = 1
+            if self.test_connect(self.block_collection[bn_s].fall_through, bn_t,visited):
+                return True
+        return False
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def f(s):
+        None
 
     def typeDecl(self):
         if self.checkFor("varToken", test=True):
@@ -1399,6 +1468,9 @@ class Parser:
         self.checkFor("beginToken")
         self.statSequence()
         self.checkFor("endToken")
+        print(self.test_connect(1,2))
+        print(self.test_connect(2,7))
+        print(self.test_connect(3,2))
         self.dot_graph("test")
         self.checkFor('periodToken')
 
